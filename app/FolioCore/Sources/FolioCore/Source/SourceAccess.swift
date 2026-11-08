@@ -17,13 +17,17 @@ public protocol SourceAccess: Sendable {
 
 /// Test double: the bookmark is the URL's path as UTF-8 data.
 public struct InMemorySourceAccess: SourceAccess {
-    /// Paths that should fail as `.unavailable`.
+    /// Paths that should fail as `.unavailable` when accessed.
     public var unavailable: Set<String> = []
+    /// Paths that cannot be bookmarked, failing as `.unavailable` — a picked item that
+    /// went away before it could be referenced.
+    public var unbookmarkable: Set<String> = []
 
     public init() {}
 
     public func bookmark(for url: URL) throws(SourceAccessError) -> Data {
-        Data(url.path.utf8)
+        guard !unbookmarkable.contains(url.path) else { throw .unavailable }
+        return Data(url.path.utf8)
     }
 
     public func withAccess<T: Sendable>(

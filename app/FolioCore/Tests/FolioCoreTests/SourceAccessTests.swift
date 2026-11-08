@@ -25,6 +25,14 @@ struct SourceAccessTests {
         }
     }
 
+    @Test("unbookmarkable paths throw .unavailable when bookmarked")
+    func unbookmarkable() {
+        var access = InMemorySourceAccess()
+        let url = URL(fileURLWithPath: "/tmp/x/Gone")
+        access.unbookmarkable.insert(url.path)
+        #expect(throws: SourceAccessError.unavailable) { try access.bookmark(for: url) }
+    }
+
     @Test("volume capacity reports a positive number for the temp directory")
     func capacity() throws {
         #expect(

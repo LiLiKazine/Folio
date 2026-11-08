@@ -335,7 +335,7 @@ struct LibraryTests {
         let record = try #require(try await fixture.imports.importRecord(id: queued.id))
         #expect(record.status == .failed)
         #expect(record.failureReason == .cancelled)
-        await #expect(throws: LibraryError.invalidStatus) {
+        await #expect(throws: LibraryError.invalidStatus(.cancelImport)) {
             try await fixture.library.cancelImport(id: queued.id)
         }
     }
@@ -383,10 +383,10 @@ struct LibraryTests {
         try await fixture.imports.add(queued)
         try await fixture.imports.add(failed)
 
-        await #expect(throws: LibraryError.invalidStatus) {
+        await #expect(throws: LibraryError.invalidStatus(.removeImport)) {
             try await fixture.library.removeImport(id: queued.id)
         }
-        await #expect(throws: LibraryError.notFound) {
+        await #expect(throws: LibraryError.notFound(.removeImport)) {
             try await fixture.library.removeImport(id: ImportID())
         }
         try await fixture.library.removeImport(id: failed.id)
@@ -427,7 +427,7 @@ struct LibraryTests {
 
         #expect(events == [.bookOpened(book.id, at: openedAt)])
         #expect(try await fixture.books.book(id: book.id)?.lastOpenedAt == openedAt)
-        await #expect(throws: LibraryError.notFound) {
+        await #expect(throws: LibraryError.notFound(.open)) {
             try await fixture.library.open(bookID: BookID())
         }
     }

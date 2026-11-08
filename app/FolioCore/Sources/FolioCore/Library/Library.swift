@@ -1,7 +1,5 @@
 import Foundation
 
-public enum LibraryError: Error, Equatable { case emptyTitle, notFound, invalidStatus }
-
 /// Owns the Books and Imports, runs Imports one at a time in creation order, and
 /// announces each change as a `LibraryEvent`.
 public actor Library {
@@ -45,13 +43,17 @@ public actor Library {
     /// Deletes leftover staging, removes Book records without folders and folders without records,
     /// returns In Progress Imports to Queued (or Completed when their Book was already
     /// added), then starts the scheduler. Cleanup is best-effort: a step that fails is
-    /// logged and skipped, so recovery and the scheduler always run. Throws only when
-    /// the In Progress Imports cannot be read, after starting the scheduler anyway.
-    public func start() async throws {
+    /// logged and skipped, so recovery and the scheduler always run. Throws only
+    /// `LibraryError` — `.storage(.openLibrary)` when the In Progress Imports cannot be
+    /// read, after starting the scheduler anyway.
+    public func start() async throws(LibraryError) {
         defer { kick() }
         removeLeftoverStaging()
         await reconcileBookFolders()
-        for var record in try await imports.imports(status: .inProgress) {
+        let inProgress = try await storageGuard(.openLibrary) {
+            try await imports.imports(status: .inProgress)
+        }
+        for var record in inProgress {
             do {
                 if let book = try await addedBook(for: record) {
                     try await complete(record, with: book)
@@ -68,92 +70,130 @@ public actor Library {
         }
     }
 
-    public func items() async throws -> [LibraryItem] {
-        var items = try await books.allBooks().map(LibraryItem.book)
-        for status in [ImportStatus.inProgress, .queued, .failed] {
-            items += try await imports.imports(status: status).map(LibraryItem.importRecord)
+    /// The Books and unfinished Imports in Library order. Throws only `LibraryError`.
+    public func items() async throws(LibraryError) -> [LibraryItem] {
+        try await storageGuard(.updateLibrary) {
+            var items = try await books.allBooks().map(LibraryItem.book)
+            for status in [ImportStatus.inProgress, .queued, .failed] {
+                items += try await imports.imports(status: status).map(LibraryItem.importRecord)
+            }
+            return items.inLibraryOrder()
         }
-        return items.inLibraryOrder()
     }
 
-    public func createImport(from pickedURL: URL) async throws -> ImportID {
+    /// Queues a new Import of the picked Source. Throws only `LibraryError`:
+    /// `.sourceUnavailable` or `.sourceNotDownloaded` when the Source cannot be
+    /// referenced, `.storage(.import)` when the Import cannot be saved.
+    public func createImport(from pickedURL: URL) async throws(LibraryError) -> ImportID {
+        let sourceName = pickedURL.lastPathComponent
+        let bookmark: Data
+        do {
+            bookmark = try sourceAccess.bookmark(for: pickedURL)
+        } catch {
+            switch error {
+            case .unavailable: throw .sourceUnavailable(sourceName: sourceName)
+            case .notDownloaded: throw .sourceNotDownloaded(sourceName: sourceName)
+            }
+        }
         let record = Import(
-            id: ImportID(), status: .queued,
-            sourceBookmark: try sourceAccess.bookmark(for: pickedURL),
-            sourceName: pickedURL.lastPathComponent,
+            id: ImportID(), status: .queued, sourceBookmark: bookmark, sourceName: sourceName,
             title: SourceScanner.title(forSource: pickedURL), pagesDone: 0, pagesTotal: nil,
             failureReason: nil, bookID: nil, createdAt: now(), finishedAt: nil)
-        try await imports.add(record)
+        try await storageGuard(.import) { try await imports.add(record) }
         continuation.yield(.importQueued(record.id, title: record.title))
         kick()
         return record.id
     }
 
-    public func cancelImport(id: ImportID) async throws {
-        let record = try await importRecord(id: id)
-        if running?.id == id {
-            scheduler?.cancel()
-        } else if record.status == .queued {
-            cancelledWhileQueued.insert(id)
-            do {
-                try await fail(record, reason: .cancelled)
-            } catch {
-                cancelledWhileQueued.remove(id)
-                throw error
+    /// Cancels a running or Queued Import. Throws only `LibraryError`, naming
+    /// `.cancelImport`.
+    public func cancelImport(id: ImportID) async throws(LibraryError) {
+        try await storageGuard(.cancelImport) {
+            let record = try await importRecord(id: id, for: .cancelImport)
+            if running?.id == id {
+                scheduler?.cancel()
+            } else if record.status == .queued {
+                cancelledWhileQueued.insert(id)
+                do {
+                    try await fail(record, reason: .cancelled)
+                } catch {
+                    cancelledWhileQueued.remove(id)
+                    throw error
+                }
+            } else {
+                throw LibraryError.invalidStatus(.cancelImport)
             }
-        } else {
-            throw LibraryError.invalidStatus
         }
     }
 
-    public func retryImport(id: ImportID) async throws {
-        var record = try await importRecord(id: id)
-        guard record.status == .failed else { throw LibraryError.invalidStatus }
-        if let book = try await addedBook(for: record) {
-            try await complete(record, with: book)
-            return
+    /// Queues a Failed Import again. Throws only `LibraryError`, naming `.retryImport`.
+    public func retryImport(id: ImportID) async throws(LibraryError) {
+        try await storageGuard(.retryImport) {
+            var record = try await importRecord(id: id, for: .retryImport)
+            guard record.status == .failed else {
+                throw LibraryError.invalidStatus(.retryImport)
+            }
+            if let book = try await addedBook(for: record) {
+                try await complete(record, with: book)
+                return
+            }
+            cancelledWhileQueued.remove(id)
+            record.status = .queued
+            record.pagesDone = 0
+            record.pagesTotal = nil
+            record.failureReason = nil
+            record.finishedAt = nil
+            try await imports.update(record)
+            continuation.yield(.importQueued(record.id, title: record.title))
+            kick()
         }
-        cancelledWhileQueued.remove(id)
-        record.status = .queued
-        record.pagesDone = 0
-        record.pagesTotal = nil
-        record.failureReason = nil
-        record.finishedAt = nil
-        try await imports.update(record)
-        continuation.yield(.importQueued(record.id, title: record.title))
-        kick()
     }
 
-    public func removeImport(id: ImportID) async throws {
-        guard try await importRecord(id: id).status == .failed else {
-            throw LibraryError.invalidStatus
+    /// Takes a Failed Import out of the Library. Throws only `LibraryError`, naming
+    /// `.removeImport`.
+    public func removeImport(id: ImportID) async throws(LibraryError) {
+        try await storageGuard(.removeImport) {
+            guard try await importRecord(id: id, for: .removeImport).status == .failed else {
+                throw LibraryError.invalidStatus(.removeImport)
+            }
+            try await imports.remove(id: id)
+            continuation.yield(.importRemoved(id))
         }
-        try await imports.remove(id: id)
-        continuation.yield(.importRemoved(id))
     }
 
-    public func rename(bookID: BookID, to title: String) async throws {
+    /// Changes a Book's Title. Throws only `LibraryError`: `.emptyTitle`, or a case
+    /// naming `.rename`.
+    public func rename(bookID: BookID, to title: String) async throws(LibraryError) {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { throw LibraryError.emptyTitle }
-        var book = try await book(id: bookID)
-        book.title = title
-        try await books.update(book)
-        continuation.yield(.bookRenamed(bookID, title: title))
+        guard !title.isEmpty else { throw .emptyTitle }
+        try await storageGuard(.rename) {
+            var book = try await book(id: bookID, for: .rename)
+            book.title = title
+            try await books.update(book)
+            continuation.yield(.bookRenamed(bookID, title: title))
+        }
     }
 
-    public func open(bookID: BookID) async throws {
-        var book = try await book(id: bookID)
-        let openedAt = now()
-        book.lastOpenedAt = openedAt
-        try await books.update(book)
-        continuation.yield(.bookOpened(bookID, at: openedAt))
+    /// Records that a Book was opened. Throws only `LibraryError`, naming `.open`.
+    public func open(bookID: BookID) async throws(LibraryError) {
+        try await storageGuard(.open) {
+            var book = try await book(id: bookID, for: .open)
+            let openedAt = now()
+            book.lastOpenedAt = openedAt
+            try await books.update(book)
+            continuation.yield(.bookOpened(bookID, at: openedAt))
+        }
     }
 
     /// Removes the record first, so a Book is never listed without its folder. A folder
     /// that cannot be deleted is logged and left as an orphan for launch reconciliation.
-    public func removeBook(id: BookID) async throws {
-        let book = try await book(id: id)
-        try await books.remove(id: id)
+    /// Throws only `LibraryError`, naming `.deleteBook`.
+    public func removeBook(id: BookID) async throws(LibraryError) {
+        let book = try await storageGuard(.deleteBook) {
+            let book = try await book(id: id, for: .deleteBook)
+            try await books.remove(id: id)
+            return book
+        }
         continuation.yield(.bookRemoved(id))
         let folder = booksDirectory.appending(path: book.folderName)
         guard fileManager.fileExists(atPath: folder.path) else { return }
@@ -166,17 +206,40 @@ public actor Library {
         }
     }
 
+    // MARK: - Errors
+
+    /// Runs `body` for the public operation `operation`, so that operation throws only
+    /// `LibraryError`: a `LibraryError` passes through unchanged, and anything else is
+    /// logged and becomes `.storage(operation)`.
+    private func storageGuard<T>(
+        _ operation: LibraryOperation, _ body: () async throws -> T
+    ) async throws(LibraryError) -> T {
+        do {
+            return try await body()
+        } catch let error as LibraryError {
+            throw error
+        } catch {
+            LibraryLog.logger.error(
+                "Could not \(operation.rawValue, privacy: .public): \(String(describing: error), privacy: .public)"
+            )
+            throw .storage(operation)
+        }
+    }
+
     // MARK: - Lookup
 
-    private func importRecord(id: ImportID) async throws -> Import {
+    private func importRecord(id: ImportID, for operation: LibraryOperation) async throws -> Import
+    {
         guard let record = try await imports.importRecord(id: id) else {
-            throw LibraryError.notFound
+            throw LibraryError.notFound(operation)
         }
         return record
     }
 
-    private func book(id: BookID) async throws -> Book {
-        guard let book = try await books.book(id: id) else { throw LibraryError.notFound }
+    private func book(id: BookID, for operation: LibraryOperation) async throws -> Book {
+        guard let book = try await books.book(id: id) else {
+            throw LibraryError.notFound(operation)
+        }
         return book
     }
 
