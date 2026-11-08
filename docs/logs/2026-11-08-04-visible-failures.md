@@ -55,9 +55,10 @@ any catch that does not.
 - The Import scheduler flood: when a disk-full store refused both the In Progress and
   the Failed write, the scheduler re-picked the same Queued Import at once and
   emitted a `LibraryStorageFailed` event on every pass. Fixed with a per-session skip set.
-- Launch could produce two or three Notices for one broken store (the launch step `start()` throwing, the Import scheduler's read failing, then a
-  failing reload of the Library list). The reload after a throwing launch step
-  or after a `LibraryStorageFailed` event is now log-only.
+- Launch could produce two or three Notices for one broken store (the launch
+  step `start()` throwing, the Import scheduler's read failing, then a failing
+  reload of the Library list). The reload after a throwing launch step or after
+  a `LibraryStorageFailed` event is now log-only.
 - SwiftUI dialog hand-over: an `isPresented` binding that never flips false then
   true will not show the second Notice, and a binding setter that removed
   a Notice could remove a waiting one unseen. The fix: only the OK button
@@ -76,9 +77,9 @@ any catch that does not.
 Remaining `// Log-only:` catches (`grep -rn "Log-only:" app/`):
 
 - `Library.swift:269`, creating the Books directory at launch: an Import that needs the directory ends Failed with its own reason.
-- `Library.swift:275`, removing leftover staging: leftover staging is temporary files that nothing in the Library lists.
+- `Library.swift:275`, removing leftover staging: leftover staging is temporary storage that nothing in the Library lists.
 - `Library.swift:317`, deleting an orphan folder: a folder without a record is not listed, so it only takes up space.
-- `Library.swift:428`, saving Import progress: progress is shown from events, and launch recovery resets the stored count.
+- `Library.swift:428`, saving an Import's count of Pages copied: the count is shown from ImportProgressed events, and launch recovery resets the stored count.
 - `LibraryModel.swift:67`, reload after the launch step (`start()`) threw: the Open the Library Notice already covers this launch failure.
 - `LibraryModel.swift:79`, reload after a `LibraryStorageFailed` event: the storage Notice already covers it; a successful reload still refreshes the list.
 
@@ -89,7 +90,7 @@ Remaining `// Log-only:` catches (`grep -rn "Log-only:" app/`):
 
 ## Follow-ups
 
-- Untested paths: the launch step (`start()`) failing to read Imports, cancel/retry/remove-Import storage failures, the reason given when a Source's files are not downloaded from iCloud yet (`sourceNotDownloaded`); the storage test fails both the Book and Import stores at once, and several event tests drain only the first event while asserting equality.
+- Untested paths: the launch step (`start()`) failing to read Imports, cancel/retry/remove-Import storage failures, the reason given when a Source has not finished downloading from iCloud (`sourceNotDownloaded`); the storage test fails both the Book and Import stores at once, and several event tests drain only the first event while asserting equality.
 - The bounded 300 ms event drains in `LibraryTests` (waits of 300 ms that collect events during a test) add about 2.4 s and can miss an event that arrives late.
 - Operation names inside Notice titles are English raw values and are not translatable; two tests that check only part of a Notice's text; an unneeded `@MainActor` (the marker that keeps a type on the screen's thread) sits on `NoticeTests`.
 - A Notice queued while a Rename or Delete confirmation is closing may not present (two dialogs on one view); the test hook for DEBUG builds (`FOLIO_DEBUG_NOTICES`) queues before the Library has loaded.
