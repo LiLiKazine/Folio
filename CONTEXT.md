@@ -45,6 +45,12 @@ _Avoid_: thumbnail
 The Page a reader was last on in a Book.
 _Avoid_: progress, bookmark, last read
 
+**Notice**:
+A message the Library shows the user about an action that could not be
+completed, naming what failed and, when the user can do something about it,
+what to do.
+_Avoid_: toast, alert, error message, banner
+
 ## Events
 
 Facts the Library announces after they have happened. Named in the past
@@ -80,3 +86,8 @@ Reading Position.
 
 **BookRemoved**:
 A Book and all its Pages have left the Library.
+
+**LibraryStorageFailed**:
+The Library could not save or apply a change on the user's behalf; carries
+what it was trying to do. What the user sees may now disagree with what is
+stored.
