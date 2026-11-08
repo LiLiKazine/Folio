@@ -64,6 +64,7 @@ struct ImportCard: View {
             Image(systemName: "clock")
                 .font(.title2)
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
         case .failed:
             Button("Retry", systemImage: "arrow.clockwise", action: onRetry)
                 .buttonStyle(.bordered)

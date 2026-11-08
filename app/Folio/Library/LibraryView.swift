@@ -42,7 +42,7 @@ struct LibraryView: View {
                 TextField("Title", text: $renameTitle)
                 Button("Cancel", role: .cancel) {}
                 Button("Save") {
-                    let title = renameTitle
+                    let title = renameTitle.trimmingCharacters(in: .whitespacesAndNewlines)
                     Task { await model.rename(book.id, to: title) }
                 }
                 .disabled(renameTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

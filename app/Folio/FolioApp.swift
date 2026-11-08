@@ -5,8 +5,11 @@ import SwiftUI
 struct FolioApp: App {
     /// Nil when Folio's storage could not be set up at launch.
     @State private var model: LibraryModel?
-    /// `LibraryModel.start()` must run once for the app's lifetime, not once per window.
-    @State private var hasStarted = false
+    /// Runs `LibraryModel.start()` for the whole process. It is owned by the App, not
+    /// a window: closing the last window on macOS (Cmd-W) would cancel a window's
+    /// `.task` while the app keeps running, and `Library.start()` must not run twice
+    /// because it clears staging. Never cancelled.
+    @State private var eventLoop: Task<Void, Never>?
 
     init() {
         // Also proves FolioCore is linked into the app target: remove the
@@ -21,10 +24,10 @@ struct FolioApp: App {
                 NavigationStack {
                     LibraryView(model: model)
                 }
-                .task {
-                    guard !hasStarted else { return }
-                    hasStarted = true
-                    await model.start()
+                .onAppear {
+                    if eventLoop == nil {
+                        eventLoop = Task { await model.start() }
+                    }
                 }
             } else {
                 Text("Folio couldn't open its Library.")
