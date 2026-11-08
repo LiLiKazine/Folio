@@ -4,3 +4,13 @@ SWIFT_OPTIMIZATION_LEVEL = -O
 SWIFT_COMPILATION_MODE = wholemodule
 ENABLE_NS_ASSERTIONS = NO
 VALIDATE_PRODUCT = YES
+
+// --- Signing for archives (Xcode Cloud, TestFlight) ---
+// Debug stays unsigned (see Shared.xcconfig) so a machine with no Apple Developer
+// account can still build and test. Only Release signs, with the personal team.
+// Set here and not in Xcode's Signing pane, which writes into project.pbxproj and
+// would also sign Debug.
+CODE_SIGN_STYLE = Automatic
+DEVELOPMENT_TEAM = PJBUF7JSHK
+CODE_SIGN_IDENTITY = Apple Development
+CODE_SIGN_IDENTITY[sdk=macosx*] = Apple Development

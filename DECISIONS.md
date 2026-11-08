@@ -452,3 +452,36 @@ switch that queues test Notices. The Presentation Coordinator entry above
 records that kind of hook as a removed workaround, so the Notice-over-the-open-
 Book check used a real failing Import queued behind a long one.
 
+## 2026-11-08: Xcode Cloud
+
+*Xcode Cloud* is Apple's build service: when a commit reaches GitHub it builds,
+tests and archives the app on Apple's machines, and can send the result to
+TestFlight. An *archive* is the signed build that goes to TestFlight or the App
+Store. A *workflow* is the list of when to run and what to do; it lives in App
+Store Connect and is made in Xcode, not in this repository.
+
+**Only Release is signed.** Signing (the team and certificate that prove a build
+is yours) is set in `app/Config/Release.xcconfig` with the personal team
+`PJBUF7JSHK`. Debug stays unsigned, so a machine with no Apple Developer account,
+such as the GitHub Actions runner, can still build and test. Xcode's Signing pane
+writes the team into `project.pbxproj` for every configuration, which would sign
+Debug too; do not use it, and edit `Release.xcconfig` instead. What the user
+experiences: nothing changes for a reader of the app; archives and TestFlight
+builds are signed as the personal team.
+
+**Xcode Cloud numbers its own builds.** TestFlight refuses a build number it has
+already seen for a version, and `Version.xcconfig` holds a fixed 1.
+`app/ci_scripts/ci_pre_xcodebuild.sh` (the folder Xcode Cloud reads, next to the
+project) writes Xcode Cloud's build number into that file for archives only, on
+the runner's copy of the code. The marketing version is still edited by hand.
+
+**FolioCore's warnings still fail the build in Xcode Cloud.** Xcode silences
+warnings in Swift packages, so the scheme's own tests would pass with a warning in
+`FolioCore`. The same script runs `swift test` with warnings as errors before
+Xcode Cloud builds for testing, as `scripts/test.sh` does.
+
+**Left to the owner.** The workflow itself; the export-compliance answer
+(whether the app uses non-exempt encryption), which TestFlight asks for each build
+unless it is declared; and a macOS app category, which the Mac App Store
+requires. GitHub Actions is unchanged and runs alongside.
+
