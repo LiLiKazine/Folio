@@ -12,7 +12,7 @@ struct LibraryView: View {
     @State private var bookToRename: Book?
     @State private var renameTitle = ""
     @State private var bookToDelete: Book?
-    /// The Notice the alert shows; see `showPresentedNotice()`.
+    /// The Notice on screen; see `showPresentedNotice()`.
     @State private var shownNotice: Notice?
     #if os(macOS)
         /// The Book a single click selected; the target of the Delete key.
@@ -130,6 +130,7 @@ struct LibraryView: View {
             }
             .onChange(of: model.presentedNotice?.id, initial: true) { showPresentedNotice() }
             .onChange(of: shownNotice) { showPresentedNotice() }
+            .onChange(of: isPresentingOtherDialog) { showPresentedNotice() }
             .onAppear {
                 Task { await model.reload() }
             }
@@ -331,30 +332,51 @@ struct LibraryView: View {
         }
     }
 
-    /// Shows the model's presented Notice once no alert is showing one.
+    /// Shows the model's presented Notice once no dialog on this view is open.
     ///
-    /// The alert is driven by `shownNotice`, not by the model, and the hand-over
-    /// waits for the alert to close: `shownNotice` becomes nil only when SwiftUI
-    /// writes `isPresented = false`, and the next Notice is set only after that,
-    /// plus `noticeHandOverDelay` so the closing alert has finished animating out
-    /// and `isPresented` is seen going false then true.
+    /// The Notice dialog is driven by `shownNotice`, not by the model, and the
+    /// hand-over waits for every other dialog to close: `shownNotice` becomes nil
+    /// only when SwiftUI writes `isPresented = false`, and the next Notice is set
+    /// only after that, plus `noticeHandOverDelay` so the closing dialog has
+    /// finished animating out and `isPresented` is seen going false then true.
     ///
-    /// This cannot lose a Notice: only the OK button removes one from the model,
-    /// and only the Notice that button was shown with (`dismissNotice(_:)` checks
-    /// the id). A late `isPresented = false` that clears the next Notice only
-    /// hides it; it is still first in the model and is shown again from here.
+    /// It also waits while this view shows the file picker, a Rename or Delete
+    /// confirmation: SwiftUI refuses a second presentation from the same view
+    /// without ever writing `isPresented = false`, so handing over then would
+    /// leave `shownNotice` set and block every later Notice. Closing that dialog
+    /// changes `isPresentingOtherDialog`, which calls this again.
+    ///
+    /// Only the OK button removes a Notice from the model, and only the Notice
+    /// that button was shown with (`dismissNotice(_:)` checks the id). A late
+    /// `isPresented = false` that clears the next Notice only hides it; it is
+    /// still first in the model and is set again from here.
     private func showPresentedNotice() {
-        guard shownNotice == nil, let next = model.presentedNotice else { return }
+        guard shownNotice == nil, !isPresentingOtherDialog, let next = model.presentedNotice
+        else { return }
         Task {
+            // Ignored: this Task is never cancelled, and the guard below re-checks
+            // everything before a Notice is shown.
             try? await Task.sleep(for: Self.noticeHandOverDelay)
-            guard shownNotice == nil, model.presentedNotice?.id == next.id else { return }
+            guard shownNotice == nil, !isPresentingOtherDialog,
+                model.presentedNotice?.id == next.id
+            else { return }
             shownNotice = next
         }
     }
 
+    /// True while this view shows the file picker or a confirmation; a Notice waits.
+    private var isPresentingOtherDialog: Bool {
+        #if os(iOS)
+            let isConfirmingSelection = isConfirmingDeleteSelection
+        #else
+            let isConfirmingSelection = false
+        #endif
+        return isImporting || bookToRename != nil || bookToDelete != nil || isConfirmingSelection
+    }
+
     private static let noticeHandOverDelay = Duration.milliseconds(150)
 
-    /// Setting false only hides the alert; the model keeps the Notice until OK.
+    /// Setting false only hides the dialog; the model keeps the Notice until OK.
     private var noticeIsPresented: Binding<Bool> {
         Binding(
             get: { shownNotice != nil },

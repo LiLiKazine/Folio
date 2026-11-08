@@ -234,13 +234,24 @@ the file picker. Try again."
 **How Notices are handed over on screen: only OK removes a Notice.** The
 Library shows one Notice at a time in a system dialog (SwiftUI's `.alert`).
 Pressing OK (or Escape) is the only thing that removes the Notice from the
-queue. If the dialog closes any other way (the system hides it), the Notice
-stays queued and is shown again, so a Notice is never lost unseen. The next
-queued Notice appears only after the previous dialog has fully closed, 150 ms
-later, because SwiftUI will not reliably show a new dialog while the old one is
-still closing. The delay is empirical; if it is too short the user may see the
-next Notice flicker, never lose it. This was checked on the Mac and on a
-single-display iPhone simulator.
+queue. If the system closes the dialog any other way, the Notice stays first
+in the queue and the screen shows it again. The next queued Notice appears only
+after the previous dialog has fully closed, 150 ms later, because SwiftUI will
+not reliably show a new dialog while the old one is still closing. The delay
+was found by trying it, not from documentation, and nothing retries: if it
+turns out too short on some device, the Notice would not appear and no later
+Notice would either until Folio is relaunched. This was checked on the Mac and on a single-display iPhone
+simulator.
+
+**A Notice waits while another dialog on the Library screen is open.** The
+Library screen can only show one dialog at a time: the file picker, the Rename
+dialog, a delete confirmation, or a Notice. Before this fix, a Notice that
+arrived while one of the others was open was silently refused by the system,
+and the screen then believed a Notice was showing, so no Notice appeared again
+for the rest of the session. Now the Notice waits in the queue and appears
+150 ms after the other dialog closes. What the user sees: they finish or cancel
+what they were doing, and the Notice follows. This was checked by hand with
+the file picker on the Mac and on an iPhone simulator.
 
 **The Library's launch step (`start()`) keeps its typed throw.** The plan said
 it would stop throwing and announce an event instead. Task 1 had already made

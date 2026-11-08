@@ -85,12 +85,25 @@ import Observation
     }
 
     #if DEBUG
-        /// Exists only for the manual check that a second Notice is presented after
-        /// the first is dismissed: launching with `FOLIO_DEBUG_NOTICES=2` queues two.
+        /// Exists only for manual checks of Notice presentation. Launching with
+        /// `FOLIO_DEBUG_NOTICES=2` queues two Notices, to check the second is presented
+        /// after the first is dismissed. `FOLIO_DEBUG_NOTICES=picker` queues one Notice
+        /// 2 s after launch, to check a Notice queued while the file picker is open
+        /// appears once the picker closes.
         private func queueDebugNotices() {
-            guard ProcessInfo.processInfo.environment["FOLIO_DEBUG_NOTICES"] == "2" else { return }
-            queue(Notice(storageFailed: .updateLibrary))
-            queue(Notice(storageFailed: .deleteBook))
+            switch ProcessInfo.processInfo.environment["FOLIO_DEBUG_NOTICES"] {
+            case "2":
+                queue(Notice(storageFailed: .updateLibrary))
+                queue(Notice(storageFailed: .deleteBook))
+            case "picker":
+                Task {
+                    // Ignored: this Task is never cancelled; it only delays a test Notice.
+                    try? await Task.sleep(for: .seconds(2))
+                    queue(Notice(storageFailed: .updateLibrary))
+                }
+            default:
+                break
+            }
         }
     #endif
 
