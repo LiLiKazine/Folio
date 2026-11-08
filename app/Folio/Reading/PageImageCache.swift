@@ -25,10 +25,14 @@ actor PageImageCache {
     }
 
     /// The Page at `index`, decoded now if the cache does not hold it; nil when the
-    /// index is outside the Book or the Page cannot be decoded.
+    /// index is outside the Book, the Page cannot be decoded, or the calling task was
+    /// cancelled before the decode began.
     func image(at index: Int) -> CGImage? {
         guard urls.indices.contains(index) else { return nil }
         if let decoded = held[index] { return decoded.image }
+        // The Page that asked has scrolled away (its task was cancelled); decoding for it
+        // would only delay the Page the reader landed on.
+        guard !Task.isCancelled else { return nil }
         let decoded = Decoded(image: PageImage.decode(url: urls[index], maxPixelSize: maxPixelSize))
         decodeCount += 1
         held[index] = decoded

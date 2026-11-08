@@ -21,6 +21,10 @@ import Observation
 
     private let library: Library
     private let booksDirectory: URL
+    /// The latest Page asked for, per Book, not yet saved.
+    private var pendingTurns: [BookID: Int] = [:]
+    /// Books with a Reading Position save in progress.
+    private var booksBeingSaved: Set<BookID> = []
 
     /// `booksDirectory` must be the directory the Library's `ImportPipeline` writes
     /// Book folders into (in the app, `LibraryStorage.booksDirectory()`); the model
@@ -137,37 +141,47 @@ import Observation
     /// Records the open but does not reload: the Library order refreshes the next
     /// time the screen appears, so the Book does not jump while the user taps it.
     ///
-    /// Returns whether the Book may be shown: false only when the Library no longer
-    /// has it, which queues its Notice. A failure to record the open is logged and
-    /// the Book opens anyway.
+    /// Returns the Book to show: the Library's current copy, so a Reading Position moved
+    /// since `book` was read (by another window) is not lost. When the open could not be
+    /// recorded it is logged and `book` itself is returned. Returns nil only when the
+    /// Library no longer has the Book, which queues its Notice.
     @discardableResult
-    func open(_ id: BookID) async -> Bool {
+    func open(_ book: Book) async -> Book? {
         do {
-            try await library.open(bookID: id)
-            return true
+            return try await library.open(bookID: book.id)
         } catch .notFound {
             AppLog.library.error("Could not open a Book the Library no longer has")
             queue(Notice(error: .notFound(.open)))
-            return false
+            return nil
         } catch {
             // Log-only by the owner's ruling (reading design, "Opening"): the Pages are
             // there and readable; a failed record changes only Library order.
             AppLog.library.error(
                 "Could not record an open: \(String(describing: error), privacy: .public)")
-            return true
+            return book
         }
     }
 
     /// Moves the Book's Reading Position to the Page at `index`. Never queues a Notice.
+    ///
+    /// Saves one at a time per Book and always saves the latest Page asked for, so a
+    /// burst of turns (a slider drag) ends with the last Page stored however long an
+    /// earlier save takes. A call made while a save is running returns at once; the
+    /// running call saves its Page.
     func turnPage(_ id: BookID, to index: Int) async {
-        do {
-            try await library.turnPage(bookID: id, to: index)
-        } catch {
-            // Log-only by the owner's ruling (reading design, "A failed save while
-            // reading is suppressed"): the Page turn itself visibly succeeded.
-            AppLog.library.error(
-                "Could not save the Reading Position: \(String(describing: error), privacy: .public)"
-            )
+        pendingTurns[id] = index
+        guard booksBeingSaved.insert(id).inserted else { return }
+        defer { booksBeingSaved.remove(id) }
+        while let page = pendingTurns.removeValue(forKey: id) {
+            do {
+                try await library.turnPage(bookID: id, to: page)
+            } catch {
+                // Log-only by the owner's ruling (reading design, "A failed save while
+                // reading is suppressed"): the Page turn itself visibly succeeded.
+                AppLog.library.error(
+                    "Could not save the Reading Position: \(String(describing: error), privacy: .public)"
+                )
+            }
         }
     }
 

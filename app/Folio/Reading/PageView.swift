@@ -57,11 +57,10 @@ struct PageView: View {
         }
         .task(id: cache.map(ObjectIdentifier.init)) {
             guard let cache else { return }
-            if let image = await cache.image(at: index) {
-                loaded = .image(image)
-            } else {
-                loaded = .unavailable
-            }
+            let image = await cache.image(at: index)
+            // Cancelled means this Page left the screen: nil is no verdict on the file.
+            guard !Task.isCancelled else { return }
+            loaded = image.map(Loaded.image) ?? .unavailable
         }
     }
 

@@ -454,6 +454,23 @@ struct LibraryTests {
         #expect(try await fixture.books.book(id: book.id)?.title == "Vol.3")
     }
 
+    @Test("open returns the Book as stored, with its current Reading Position")
+    func openReturnsStoredBook() async throws {
+        let openedAt = Date(timeIntervalSince1970: 1_000_000)
+        let fixture = try Fixture(now: { openedAt })
+        defer { fixture.directory.remove() }
+        let book = Self.book(importedAt: .distantPast, pageCount: 5)
+        try await fixture.books.add(book)
+        // Another window turned the Book to Page 4 after this caller read its copy,
+        // which still has no Reading Position.
+        try await fixture.library.turnPage(bookID: book.id, to: 3)
+
+        let opened = try await fixture.library.open(bookID: book.id)
+
+        #expect(opened.readingPosition == 3)
+        #expect(opened.lastOpenedAt == openedAt)
+    }
+
     @Test("turnPage stores the Reading Position and emits readingPositionChanged")
     func turnPage() async throws {
         let fixture = try Fixture()

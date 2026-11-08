@@ -360,7 +360,7 @@ import UniformTypeIdentifiers
         let before = model.items
         let olderBook = try #require(books(in: before).last)
 
-        await model.open(olderBook.id)
+        await model.open(olderBook)
 
         try await waitUntil("the Library records the open") {
             try await fixture.library.items().contains {
@@ -383,7 +383,7 @@ import UniformTypeIdentifiers
 
     // MARK: - Reading
 
-    @Test("open on a storage failure opens anyway and queues no Notice")
+    @Test("open on a storage failure opens anyway with the Book it was given, and queues no Notice")
     func openStorageFailureOpens() async throws {
         let bookRepository = FailingBookRepository()
         let book = makeBook()
@@ -392,9 +392,9 @@ import UniformTypeIdentifiers
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         await bookRepository.fail([.update])
 
-        let mayOpen = await fixture.model.open(book.id)
+        let shown = await fixture.model.open(book)
 
-        #expect(mayOpen)
+        #expect(shown == book)
         #expect(fixture.model.notices.isEmpty)
     }
 
@@ -403,14 +403,30 @@ import UniformTypeIdentifiers
         let fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
 
-        let mayOpen = await fixture.model.open(BookID())
+        let shown = await fixture.model.open(makeBook())
 
-        #expect(!mayOpen)
+        #expect(shown == nil)
         #expect(
             copy(of: fixture.model.notices) == [
                 ["Couldn't Open", "It's no longer in the Library."]
             ]
         )
+    }
+
+    @Test("open shows the Reading Position the Library has, not the one on the card tapped")
+    func openShowsCurrentPosition() async throws {
+        let bookRepository = InMemoryBookRepository()
+        var stored = makeBook(pageCount: 60)
+        let onCard = stored  // the grid's copy, from before another window turned Pages
+        stored.readingPosition = 49
+        try await bookRepository.add(stored)
+        let fixture = try makeFixture(books: bookRepository)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+
+        let shown = await fixture.model.open(onCard)
+
+        #expect(onCard.readingPosition == nil)
+        #expect(shown?.readingPosition == 49)
     }
 
     enum TurnPageFailure: CaseIterable, Sendable {
@@ -454,6 +470,42 @@ import UniformTypeIdentifiers
 
         #expect(try await bookRepository.book(id: book.id)?.readingPosition == 2)
         #expect(fixture.model.notices.isEmpty)
+    }
+
+    /// Book storage whose save of a Book standing on Page 3 (index 2) is slow, so a later
+    /// turn's save can finish before an earlier one's if nothing keeps them in order.
+    private actor SlowFirstSaveBookRepository: BookRepository {
+        private let base = InMemoryBookRepository()
+
+        func allBooks() async throws -> [Book] { try await base.allBooks() }
+        func book(id: BookID) async throws -> Book? { try await base.book(id: id) }
+        func add(_ book: Book) async throws { try await base.add(book) }
+        func remove(id: BookID) async throws { try await base.remove(id: id) }
+        func update(_ book: Book) async throws {
+            if book.readingPosition == 2 { try await Task.sleep(for: .milliseconds(300)) }
+            try await base.update(book)
+        }
+    }
+
+    @Test("turns started together leave the last Page stored even when an earlier save is slow")
+    func turnPagesStayInOrder() async throws {
+        let bookRepository = SlowFirstSaveBookRepository()
+        let book = makeBook(pageCount: 5)
+        try await bookRepository.add(book)
+        let fixture = try makeFixture(books: bookRepository)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+
+        let turns = [2, 3].map { index in Task { await model.turnPage(book.id, to: index) } }
+        for turn in turns { await turn.value }
+        try await waitUntil("the last turn is stored") {
+            try await bookRepository.book(id: book.id)?.readingPosition == 3
+        }
+        // A bounded negative check: a slow earlier save must not land after it.
+        try await Task.sleep(for: .milliseconds(500))
+
+        #expect(try await bookRepository.book(id: book.id)?.readingPosition == 3)
+        #expect(model.notices.isEmpty)
     }
 
     @Test("pageURL joins the Books directory, folder, pages folder, and Page file name")

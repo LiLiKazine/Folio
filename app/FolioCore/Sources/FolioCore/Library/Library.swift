@@ -180,14 +180,18 @@ public actor Library {
         }
     }
 
-    /// Records that a Book was opened. Throws only `LibraryError`, naming `.open`.
-    public func open(bookID: BookID) async throws(LibraryError) {
+    /// Records that a Book was opened and returns the Book as stored, so the caller shows
+    /// its current Reading Position and not one read earlier, perhaps by another window.
+    /// Throws only `LibraryError`, naming `.open`.
+    @discardableResult
+    public func open(bookID: BookID) async throws(LibraryError) -> Book {
         try await storageGuard(.open) {
             var book = try await book(id: bookID, for: .open)
             let openedAt = now()
             book.lastOpenedAt = openedAt
             try await books.update(book)
             continuation.yield(.bookOpened(bookID, at: openedAt))
+            return book
         }
     }
 

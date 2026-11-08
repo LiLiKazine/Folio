@@ -13,6 +13,8 @@ struct ReadingView: View {
     @State private var chromeIsVisible = false
     /// Decodes this Book's Pages at the window's size; nil until the size is known.
     @State private var cache: PageImageCache?
+    /// The size `cache` decodes to; the cache is rebuilt only when this changes.
+    @State private var cacheDecodeSize = 0
     @FocusState private var isFocused: Bool
     @Environment(\.displayScale) private var displayScale
 
@@ -27,6 +29,14 @@ struct ReadingView: View {
     /// and the last Page when an older edition left the position past the end.
     static func startIndex(for book: Book) -> Int {
         max(min(book.readingPosition ?? 0, book.pages.count - 1), 0)
+    }
+
+    /// The size Pages are decoded to for a window whose longer side is `windowPixels`
+    /// pixels: rounded up to a multiple of 256, so resizing a Mac window rebuilds the
+    /// cache in steps and not at every pixel.
+    static func decodeSize(forWindowPixels windowPixels: Int) -> Int {
+        let step = 256
+        return max((windowPixels + step - 1) / step, 1) * step
     }
 
     var body: some View {
@@ -60,7 +70,8 @@ struct ReadingView: View {
             .onGeometryChange(for: Int.self) { geometry in
                 Int((max(geometry.size.width, geometry.size.height) * displayScale).rounded())
             } action: { pixels in
-                makeCache(maxPixelSize: pixels)
+                let size = Self.decodeSize(forWindowPixels: pixels)
+                if size != cacheDecodeSize { makeCache(maxPixelSize: size) }
             }
             .onAppear {
                 #if os(macOS)
@@ -119,6 +130,7 @@ struct ReadingView: View {
         let urls = book.pages.indices.map { model.pageURL(for: book, at: $0) }
         let cache = PageImageCache(urls: urls, maxPixelSize: maxPixelSize)
         self.cache = cache
+        cacheDecodeSize = maxPixelSize
         Task { await cache.prefetch(around: index) }
     }
 }

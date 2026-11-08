@@ -31,4 +31,17 @@ struct ReadingViewTests {
 
         #expect(ReadingView.startIndex(for: book) == expected)
     }
+
+    @Test(
+        "decodeSize rounds the window up to a multiple of 256 pixels, so a resize rebuilds the cache in steps",
+        arguments: [
+            (windowPixels: 0, expected: 256),
+            (windowPixels: 1, expected: 256),
+            (windowPixels: 256, expected: 256),
+            (windowPixels: 257, expected: 512),
+            (windowPixels: 2622, expected: 2816),
+        ])
+    func decodeSize(windowPixels: Int, expected: Int) {
+        #expect(ReadingView.decodeSize(forWindowPixels: windowPixels) == expected)
+    }
 }

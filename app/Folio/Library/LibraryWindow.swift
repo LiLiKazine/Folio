@@ -49,11 +49,20 @@ struct LibraryWindow: View {
         .onChange(of: model.presentedNotice?.id, initial: true) { requestPresentedNotice() }
     }
 
-    /// Records the open, then pushes the Book unless the Library no longer has it.
+    /// Records the open, then pushes the Library's current copy of the Book, unless the
+    /// Library no longer has it.
     private func open(_ book: Book) {
         Task {
-            if await model.open(book.id) { path.append(book) }
+            if let current = await model.open(book) { Self.push(current, onto: &path) }
         }
+    }
+
+    /// Shows `book` unless a Book is already shown. Opening waits for the Library, so a
+    /// second tap or Return can arrive before the first Book appears; one Book is read
+    /// at a time per window, and Close would otherwise show the same Book again.
+    static func push(_ book: Book, onto path: inout [Book]) {
+        guard path.isEmpty else { return }
+        path.append(book)
     }
 
     /// Carries every dialog modifier. Keyed by the current Presentation's id,

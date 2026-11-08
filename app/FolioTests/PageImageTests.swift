@@ -97,6 +97,23 @@ struct PageImageTests {
         #expect(await cache.decodeCount == 1)
     }
 
+    @Test("a decode asked for by a task that was cancelled does not run")
+    func cancelledRequestDoesNotDecode() async throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = PageImageCache(urls: try makePages(count: 3, in: directory), maxPixelSize: 48)
+
+        // A Page that scrolled away cancels its task before the cache reaches the request.
+        let request = Task {
+            while !Task.isCancelled { await Task.yield() }
+            return await cache.image(at: 1)
+        }
+        request.cancel()
+
+        #expect(await request.value == nil)
+        #expect(await cache.decodeCount == 0)
+    }
+
     @Test("an index outside the Pages yields nil without decoding")
     func indexOutOfRange() async throws {
         let cache = PageImageCache(urls: [], maxPixelSize: 48)

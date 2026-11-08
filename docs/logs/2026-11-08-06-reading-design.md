@@ -122,6 +122,37 @@ double-click or Return, with no File menu item in this slice.
   of reading, so nothing in it can hold a Notice back.
 - Gate: `./scripts/verify.sh` green on macOS and iOS (format, build, test,
   launch with screenshots).
+- Whole-branch review (one fresh reviewer) found five problems worth fixing
+  and one worth measuring, each fixed with a test that failed first:
+  1. Page turns were saved by separate tasks with no order, so a slow save of
+     an earlier Page could land after a later one and leave an older Page
+     stored while the screen showed a later one. The model now saves one turn
+     at a time per Book and always saves the latest Page asked for.
+  2. A Book pushed from a card that had not refreshed could open on an older
+     Reading Position than the Library holds (two windows on Mac), and a
+     never-read card could reset another window's position to Page 1. Opening
+     now returns the Library's current copy of the Book.
+  3. A second tap or Return before the Book appeared pushed it twice, so Close
+     showed it again. One Book is shown per window.
+  4. Scrubbing across many Pages queued a decode for every Page passed, and
+     the landing Page waited behind them. A Page that scrolled away no longer
+     asks the cache to decode.
+  5. Resizing a Mac window rebuilt the Page cache at every pixel. The size is
+     now rounded up to a multiple of 256 pixels and the cache is rebuilt only
+     when that size changes.
+  6. Measured, not changed: the reviewer feared that each visited Page keeps
+     its decoded image, since SwiftUI's lazy stack does not release views.
+     On the iPhone simulator, visiting all 12 large Pages left the app at
+     37-38 MB with about 3 MB of image memory, so it did not reproduce. It is
+     not checked on a real device.
+- Left as deferred minors, not fixed: a stored position past the end is shown
+  from the last Page but not written back; the status line on a pushed
+  screen sits above the navigation bar (not looked at on screen); the spec
+  still gives the old Page path; DECISIONS says "only two places a failure is
+  logged" where it means "only two places a user's action failing is logged";
+  the edge-swipe-back behaviour of a hidden back button is observed, not
+  documented; a single tap waits out the double-tap window before the chrome
+  toggles; after a resize a new cache could share the old one's identity.
 
 ## Commits
 
@@ -135,4 +166,5 @@ double-click or Return, with no File menu item in this slice.
 | 5065b02 | feat(reading): decode Pages downsampled, cache the current Page and its neighbours |
 | 1d0ad87 | feat(reading): open a Book and turn its Pages |
 | 6e298f8 | docs(reading): record the Notice-over-the-open-Book check |
-| (task 7) | docs(reading): record the reading rulings |
+| b7228a7 | docs(reading): record the reading rulings |
+| (this) | fix(reading): keep Page turns in order, open on the Library's copy, push once, cancel stale decodes, resize in steps |
