@@ -60,6 +60,7 @@ struct LibraryErrorTests {
             case .removeImport: try await library.removeImport(id: failed.id)
             case .rename: try await library.rename(bookID: book.id, to: "Renamed")
             case .open: try await library.open(bookID: book.id)
+            case .turnPage: try await library.turnPage(bookID: book.id, to: 0)
             case .deleteBook: try await library.removeBook(id: book.id)
             case .updateLibrary, .openLibrary:
                 Issue.record("No operation set up for \(operation.rawValue)")
@@ -136,6 +137,7 @@ struct LibraryErrorTests {
             StorageCase(operation: .removeImport, store: .imports, call: .remove),
             StorageCase(operation: .rename, store: .books, call: .update),
             StorageCase(operation: .open, store: .books, call: .update),
+            StorageCase(operation: .turnPage, store: .books, call: .update),
             StorageCase(operation: .deleteBook, store: .books, call: .remove),
         ])
     func storage(_ storageCase: StorageCase) async throws {

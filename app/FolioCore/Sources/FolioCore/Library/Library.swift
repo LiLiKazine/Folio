@@ -191,6 +191,22 @@ public actor Library {
         }
     }
 
+    /// Moves a Book's Reading Position. Throws only `LibraryError`, naming `.turnPage`;
+    /// `.invalidStatus` for an index outside the Book's Pages. Turning to the Page the
+    /// Book is already on changes nothing and announces nothing.
+    public func turnPage(bookID: BookID, to index: Int) async throws(LibraryError) {
+        try await storageGuard(.turnPage) {
+            var book = try await book(id: bookID, for: .turnPage)
+            guard book.pages.indices.contains(index) else {
+                throw LibraryError.invalidStatus(.turnPage)
+            }
+            guard book.readingPosition != index else { return }
+            book.readingPosition = index
+            try await books.update(book)
+            continuation.yield(.readingPositionChanged(bookID, page: index))
+        }
+    }
+
     /// Removes the record first, so a Book is never listed without its folder. A folder
     /// that cannot be deleted is left as an orphan for launch reconciliation and emits
     /// `libraryStorageFailed(.deleteBook)` after `bookRemoved`.

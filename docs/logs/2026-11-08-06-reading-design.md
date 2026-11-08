@@ -75,4 +75,6 @@ double-click or Return, with no File menu item in this slice.
 
 | Commit | Subject |
 |--------|---------|
-| (this) | docs(design): reading a Book |
+| f8685c1 | docs(design): reading a Book |
+| c2a94d9 | docs(plan): implementation plan for reading a Book |
+| (task 1) | feat(library): turnPage moves a Book's Reading Position |

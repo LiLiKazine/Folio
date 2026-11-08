@@ -202,10 +202,10 @@ struct LibraryTests {
         return false
     }
 
-    private static func book(id: BookID = BookID(), importedAt: Date) -> Book {
+    private static func book(id: BookID = BookID(), importedAt: Date, pageCount: Int = 1) -> Book {
         Book(
             id: id, title: "Book", folderName: id.rawValue.uuidString,
-            pages: [Page(fileName: "0001.png")],
+            pages: (1...pageCount).map { Page(fileName: String(format: "%04d.png", $0)) },
             coverFileName: CoverImage.fileName, importedAt: importedAt, lastOpenedAt: nil,
             readingPosition: nil)
     }
@@ -452,6 +452,49 @@ struct LibraryTests {
 
         #expect(events == [.bookRenamed(book.id, title: "Vol.3")])
         #expect(try await fixture.books.book(id: book.id)?.title == "Vol.3")
+    }
+
+    @Test("turnPage stores the Reading Position and emits readingPositionChanged")
+    func turnPage() async throws {
+        let fixture = try Fixture()
+        defer { fixture.directory.remove() }
+        let book = Self.book(importedAt: .now, pageCount: 3)
+        try await fixture.books.add(book)
+
+        try await fixture.library.turnPage(bookID: book.id, to: 1)
+        try await fixture.library.turnPage(bookID: book.id, to: 1)  // repeat: no second event
+        let events = await fixture.events(for: .milliseconds(300))
+
+        #expect(events == [.readingPositionChanged(book.id, page: 1)])
+        #expect(try await fixture.books.book(id: book.id)?.readingPosition == 1)
+    }
+
+    @Test("turnPage out of range throws invalidStatus(.turnPage) and stores nothing")
+    func turnPageOutOfRange() async throws {
+        let fixture = try Fixture()
+        defer { fixture.directory.remove() }
+        let book = Self.book(importedAt: .now, pageCount: 3)
+        try await fixture.books.add(book)
+
+        for index in [-1, book.pages.count] {
+            await #expect(throws: LibraryError.invalidStatus(.turnPage)) {
+                try await fixture.library.turnPage(bookID: book.id, to: index)
+            }
+        }
+        let events = await fixture.events(for: .milliseconds(300))
+
+        #expect(events.isEmpty)
+        #expect(try await fixture.books.book(id: book.id)?.readingPosition == nil)
+    }
+
+    @Test("turnPage on an unknown Book throws notFound(.turnPage)")
+    func turnPageUnknownBook() async throws {
+        let fixture = try Fixture()
+        defer { fixture.directory.remove() }
+
+        await #expect(throws: LibraryError.notFound(.turnPage)) {
+            try await fixture.library.turnPage(bookID: BookID(), to: 0)
+        }
     }
 
     @Test("open sets lastOpenedAt and emits bookOpened")

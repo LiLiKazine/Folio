@@ -9,6 +9,8 @@ public enum LibraryEvent: Sendable, Equatable {
     case importRemoved(ImportID)
     case bookRenamed(BookID, title: String)
     case bookOpened(BookID, at: Date)
+    /// A Book's Reading Position moved to a Page because the reader turned to it.
+    case readingPositionChanged(BookID, page: Int)
     case bookRemoved(BookID)
     /// A change the Library could not save or apply on the user's behalf, with no
     /// caller to throw to; names what it was trying to do.

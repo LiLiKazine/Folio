@@ -7,6 +7,7 @@ public enum LibraryOperation: String, Sendable, Equatable, CaseIterable {
     case removeImport = "Remove Import"
     case rename = "Rename"
     case open = "Open"
+    case turnPage = "Turn Page"
     case deleteBook = "Delete Book"
     case updateLibrary = "Update the Library"
     case openLibrary = "Open the Library"
