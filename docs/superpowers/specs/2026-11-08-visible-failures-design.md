@@ -110,8 +110,9 @@ why: nothing the user sees depends on it.
 
 The model turns every `LibraryError` and every `LibraryStorageFailed` event
 into one Notice. Notices queue: a second failure does not overwrite the first.
-The Notice is a system alert with one `OK` button, titled by the operation
-and explained by the reason. Exact copy:
+A dialog Notice is a system dialog with one `OK` button; a status Notice is
+a status line (see Presentation column). Each is titled by the operation and
+explained by the reason. Exact copy:
 
 | Failure | Title | Message | Presentation |
 |---|---|---|---|
