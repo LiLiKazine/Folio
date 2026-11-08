@@ -33,6 +33,29 @@
             #expect(LibraryDropTarget.source(in: [folder, zip]) == nil)
         }
 
+        @Test("a real folder without a trailing slash is a Source")
+        func realFolderWithoutSlashAccepted() throws {
+            let path = FileManager.default.temporaryDirectory
+                .appending(path: "LibraryDropTargetTests-\(UUID().uuidString)").path
+            try FileManager.default.createDirectory(
+                atPath: path, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(atPath: path) }
+            let url = URL(fileURLWithPath: path, isDirectory: false)
+            #expect(!url.hasDirectoryPath)
+
+            #expect(LibraryDropTarget.source(in: [url]) == url)
+        }
+
+        @Test("a real file with no extension is rejected")
+        func realFileWithoutExtensionRejected() throws {
+            let url = FileManager.default.temporaryDirectory
+                .appending(path: "LibraryDropTargetTests-\(UUID().uuidString)")
+            try Data("not a Source".utf8).write(to: url)
+            defer { try? FileManager.default.removeItem(at: url) }
+
+            #expect(LibraryDropTarget.source(in: [url]) == nil)
+        }
+
         @Test("an empty drop is rejected")
         func emptyRejected() {
             #expect(LibraryDropTarget.source(in: []) == nil)

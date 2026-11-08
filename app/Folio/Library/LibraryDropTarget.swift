@@ -35,12 +35,18 @@
         }
 
         /// The Source in a drop, or nil when the drop is not exactly one folder or zip.
-        static func source(in urls: [URL]) -> URL? {
+        nonisolated static func source(in urls: [URL]) -> URL? {
             guard urls.count == 1, let url = urls.first else { return nil }
-            if url.hasDirectoryPath || url.pathExtension.lowercased() == "zip" {
+            if isFolder(url) || url.pathExtension.lowercased() == "zip" {
                 return url
             }
             return nil
+        }
+
+        /// A dropped folder's URL need not end in "/", so ask the file system too.
+        nonisolated private static func isFolder(_ url: URL) -> Bool {
+            url.hasDirectoryPath
+                || (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
         }
     }
 
