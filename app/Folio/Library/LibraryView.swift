@@ -12,6 +12,11 @@ struct LibraryView: View {
     @State private var bookToRename: Book?
     @State private var renameTitle = ""
     @State private var bookToDelete: Book?
+    #if os(macOS)
+        /// The Book a single click selected; the target of the Delete key.
+        @State private var selection: BookID?
+        @FocusState private var gridIsFocused: Bool
+    #endif
 
     init(model: LibraryModel) {
         self.model = model
@@ -25,9 +30,21 @@ struct LibraryView: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button("Import", systemImage: "plus") { isImporting = true }
+                    #if os(macOS)
+                        Button("Import…", systemImage: "plus") { isImporting = true }
+                            .help("Import a folder or zip")
+                    #else
+                        Button("Import", systemImage: "plus") { isImporting = true }
+                    #endif
                 }
             }
+            #if os(macOS)
+                .focusedSceneValue(\.libraryImporterIsPresented, $isImporting)
+                .libraryDropTarget(onImport: importSource)
+                .onChange(of: model.items) {
+                    if selectedBook == nil { selection = nil }
+                }
+            #endif
             .fileImporter(
                 isPresented: $isImporting,
                 allowedContentTypes: [.folder, .zip],
@@ -94,27 +111,47 @@ struct LibraryView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
             }
+            #if os(macOS)
+                .contentShape(.rect)
+                .onTapGesture { selection = nil }
+                .focusable()
+                .focusEffectDisabled()
+                .focused($gridIsFocused)
+                .onDeleteCommand(perform: deleteSelectedBook)
+            #endif
         }
     }
+
+    #if os(macOS)
+        /// Presents the delete confirmation for the selected Book; nil with no
+        /// selection, which leaves the Delete key and Edit → Delete disabled.
+        private var deleteSelectedBook: (() -> Void)? {
+            guard let book = selectedBook else { return nil }
+            return { bookToDelete = book }
+        }
+
+        private var selectedBook: Book? {
+            guard let selection else { return nil }
+            for case .book(let book) in model.items where book.id == selection {
+                return book
+            }
+            return nil
+        }
+    #endif
 
     @ViewBuilder private func card(for item: FolioCore.LibraryItem) -> some View {
         switch item {
         case .book(let book):
-            Button {
-                Task { await model.open(book.id) }
-            } label: {
-                BookCard(book: book, coverURL: model.coverURL(for: book))
-            }
-            .buttonStyle(.plain)
-            .contextMenu {
-                Button("Rename…", systemImage: "pencil") {
-                    renameTitle = book.title
-                    bookToRename = book
+            bookCard(for: book)
+                .contextMenu {
+                    Button("Rename…", systemImage: "pencil") {
+                        renameTitle = book.title
+                        bookToRename = book
+                    }
+                    Button("Delete Book", systemImage: "trash", role: .destructive) {
+                        bookToDelete = book
+                    }
                 }
-                Button("Delete Book", systemImage: "trash", role: .destructive) {
-                    bookToDelete = book
-                }
-            }
         case .importRecord(let record):
             ImportCard(record: record, liveProgress: model.liveProgress[record.id]) {
                 Task { await model.retryImport(record.id) }
@@ -139,18 +176,55 @@ struct LibraryView: View {
         }
     }
 
+    #if os(macOS)
+        /// Single click selects, double click opens, per the Mac HIG.
+        private func bookCard(for book: Book) -> some View {
+            BookCard(
+                book: book, coverURL: model.coverURL(for: book), isSelected: selection == book.id
+            )
+            .onTapGesture(count: 2) {
+                Task { await model.open(book.id) }
+            }
+            .simultaneousGesture(
+                TapGesture().onEnded {
+                    selection = book.id
+                    gridIsFocused = true
+                }
+            )
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction {
+                Task { await model.open(book.id) }
+            }
+        }
+    #else
+        /// A tap opens.
+        private func bookCard(for book: Book) -> some View {
+            Button {
+                Task { await model.open(book.id) }
+            } label: {
+                BookCard(book: book, coverURL: model.coverURL(for: book))
+            }
+            .buttonStyle(.plain)
+        }
+    #endif
+
     private func importPicked(_ result: Result<[URL], any Error>) {
         switch result {
         case .success(let urls):
             guard let url = urls.first else { return }
-            Task {
-                let isAccessing = url.startAccessingSecurityScopedResource()
-                await model.importSource(url)
-                if isAccessing { url.stopAccessingSecurityScopedResource() }
-            }
+            importSource(url)
         case .failure(let error):
             AppLog.library.error(
                 "File picker failed: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// Imports a Source picked in the file picker or dropped on the window.
+    private func importSource(_ url: URL) {
+        Task {
+            let isAccessing = url.startAccessingSecurityScopedResource()
+            await model.importSource(url)
+            if isAccessing { url.stopAccessingSecurityScopedResource() }
         }
     }
 

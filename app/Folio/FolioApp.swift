@@ -35,6 +35,9 @@ struct FolioApp: App {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        #if os(macOS)
+            .commands { LibraryCommands() }
+        #endif
     }
 
     private static func makeModel() -> LibraryModel? {

@@ -5,10 +5,19 @@ import SwiftUI
 struct BookCard: View {
     let book: Book
     let coverURL: URL
+    /// Shows the selection highlight; only the Mac Library selects Books.
+    var isSelected = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             CoverView(url: coverURL)
+                .overlay {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 9)
+                            .strokeBorder(Color.accentColor, lineWidth: 3)
+                            .padding(-4)
+                    }
+                }
                 .padding(.bottom, 4)
             Text(book.title)
                 .font(.subheadline.weight(.semibold))
@@ -30,5 +39,6 @@ struct BookCard: View {
         }
         .contentShape(.rect)
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
