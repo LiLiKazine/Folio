@@ -40,14 +40,20 @@ import UniformTypeIdentifiers
 
     /// Source access that holds every Import inside `withAccess` until its task is
     /// cancelled, so the first Import stays In Progress and later ones stay Queued.
+    /// A Source named `unheldSourceName` is not held.
     private struct HeldSourceAccess: SourceAccess {
+        static let unheldSourceName = "Empty"
+
         func bookmark(for url: URL) throws(SourceAccessError) -> Data { Data(url.path.utf8) }
 
         func withAccess<T: Sendable>(
             to bookmark: Data, _ body: @Sendable (URL) async throws -> T
         ) async throws -> T {
-            try await Task.sleep(for: .seconds(60))
-            return try await body(URL(fileURLWithPath: String(decoding: bookmark, as: UTF8.self)))
+            let url = URL(fileURLWithPath: String(decoding: bookmark, as: UTF8.self))
+            if url.lastPathComponent != Self.unheldSourceName {
+                try await Task.sleep(for: .seconds(60))
+            }
+            return try await body(url)
         }
     }
 
@@ -122,6 +128,14 @@ import UniformTypeIdentifiers
             try writePNG(to: folder.appending(path: String(format: "%03d.png", index)))
         }
         return folder
+    }
+
+    /// A folder Source named `name` with no images in it, so its Import fails.
+    private func makeEmptySource(named name: String, in root: URL) throws -> URL {
+        let source = root.appending(path: name, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try Data("not a Page".utf8).write(to: source.appending(path: "readme.txt"))
+        return source
     }
 
     private func writePNG(to url: URL) throws {
@@ -244,16 +258,10 @@ import UniformTypeIdentifiers
         let task = try await startModel(model)
         defer { task.cancel() }
 
-        func makeEmptySource(named name: String) throws -> URL {
-            let source = fixture.root.appending(path: name, directoryHint: .isDirectory)
-            try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
-            try Data("not a Page".utf8).write(to: source.appending(path: "readme.txt"))
-            return source
-        }
         // Each ImportQueued reload is the only one that can show that many items.
-        await model.importSource(try makeEmptySource(named: "Notes"))
+        await model.importSource(try makeEmptySource(named: "Notes", in: fixture.root))
         try await waitUntil("the Notes Import is an item") { model.items.count == 1 }
-        await model.importSource(try makeEmptySource(named: "Later"))
+        await model.importSource(try makeEmptySource(named: "Later", in: fixture.root))
         try await waitUntil("both Imports are items") { model.items.count == 2 }
         // From here every reload fails; both Imports then fail with no images found,
         // Notes first. The events are handled in order, so once the Later Notice is
@@ -295,10 +303,17 @@ import UniformTypeIdentifiers
             Issue.record("expected two Import items, got \(model.items)")
             return
         }
-        defer { Task { await model.cancelImport(running.id) } }
 
         await model.cancelImport(queued.id)
-        // A Notice for the cancellation would be queued before this reload.
+        await model.cancelImport(running.id)
+        // Imports run one at a time and events are handled in order, so once this
+        // Import's Notice is queued, both cancellations have been handled; a Notice
+        // for either would already be queued ahead of it.
+        let empty = HeldSourceAccess.unheldSourceName
+        await model.importSource(try makeEmptySource(named: empty, in: fixture.root))
+        try await waitUntil("the \(empty) Import's Notice is queued") { !model.notices.isEmpty }
+        #expect(copy(of: model.notices) == [["Couldn't Import “\(empty)”", "No images found"]])
+
         try await waitUntil("the items show the cancelled Import as Failed") {
             model.items.contains {
                 if case .importRecord(let record) = $0 {
@@ -308,17 +323,10 @@ import UniformTypeIdentifiers
                 }
             }
         }
-
-        #expect(model.notices.isEmpty)
-        let failed = model.items.compactMap { item -> Import? in
-            if case .importRecord(let record) = item, record.status == .failed {
-                record
-            } else {
-                nil
-            }
+        let cancelled = model.items.compactMap { item -> Import? in
+            if case .importRecord(let record) = item, record.id == queued.id { record } else { nil }
         }
-        #expect(failed.map(\.id) == [queued.id])
-        #expect(failed.first?.failureReason == .cancelled)
+        #expect(cancelled.first?.failureReason == .cancelled)
         #expect(model.liveProgress[queued.id] == nil)
     }
 
