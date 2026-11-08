@@ -92,11 +92,13 @@ struct LibraryView: View {
     }
 
     /// Carries every dialog modifier. Keyed by the current Presentation's id,
-    /// so each Presentation gets a fresh view: SwiftUI documents that a view
-    /// whose `.id` changes is a new view, so it sees a new presentation
-    /// request rather than a changed one. Without it, a Notice promoted in the
-    /// same update as the one before it would leave `isPresented` true with
-    /// only the presented value changed, and SwiftUI might never show it.
+    /// so each Presentation gets a fresh view. That a changed `.id` makes a new
+    /// view is documented SwiftUI behaviour. That the new view presents its
+    /// dialog when it appears with `isPresented` already true is observed
+    /// behaviour, not documented; the owner's manual check is the evidence.
+    /// Without the key, a Notice promoted in the same update as the one before
+    /// it would leave `isPresented` true with only the presented value
+    /// changed, and SwiftUI might never show it.
     private var dialogHost: some View {
         Color.clear
             .fileImporter(

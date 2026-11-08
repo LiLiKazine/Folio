@@ -118,8 +118,15 @@ screen, so a second dialog can never be requested while one is showing.
 - `LibraryView` holds `@State private var queue = PresentationQueue()`.
   One modifier per Presentation kind reads `queue.current`: its binding is
   true when `current` is that kind, and its setter on `false` calls
-  `queue.dismissed(current.id)`. Dialog buttons perform their action and
-  let SwiftUI's documented write-back drive `dismissed`.
+  `queue.dismissed` with the id of the Presentation that was current when
+  the binding was made. Dialog buttons perform their action and let
+  SwiftUI's documented write-back drive `dismissed`.
+- Every dialog modifier sits on one carrier view (`dialogHost`, a
+  `Color.clear` behind the grid) keyed with `.id(queue.current?.id)`, so
+  each Presentation is shown by a new view. That a changed `.id` makes a new
+  view is documented; that the new view presents when it appears with
+  `isPresented` already true is observed, not documented, and rests on the
+  owner's manual check.
 - Every place that today sets a flag instead calls `queue.enqueue(...)`.
   `isImporting`, `bookToRename`, `bookToDelete`,
   `isConfirmingDeleteSelection`, `shownNotice`, `isSettling`,
