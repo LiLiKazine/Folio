@@ -33,7 +33,7 @@ enum LibraryStorage {
 
     /// Container whose store file is `<booksDirectory>/Library.store`.
     static func makeContainer(inMemory: Bool = false) throws -> ModelContainer {
-        let schema = Schema([BookModel.self, ImportModel.self])
+        let schema = Schema(versionedSchema: FolioSchemaV1.self)
         let configuration: ModelConfiguration
         if inMemory {
             configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -43,6 +43,7 @@ enum LibraryStorage {
             AppLog.persistence.info("Library store at \(storeURL.path, privacy: .private)")
             configuration = ModelConfiguration(schema: schema, url: storeURL)
         }
-        return try ModelContainer(for: schema, configurations: [configuration])
+        return try ModelContainer(
+            for: schema, migrationPlan: FolioMigrationPlan.self, configurations: [configuration])
     }
 }
