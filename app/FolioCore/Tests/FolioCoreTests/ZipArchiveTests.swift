@@ -107,6 +107,19 @@ struct ZipArchiveTests {
         #expect(throws: ZipError.unsupported) { try ZipArchive(url: url) }
     }
 
+    @Test("rejects entries larger than the per-entry cap as unsupported")
+    func oversized() throws {
+        let dir = try TemporaryDirectory()
+        defer { dir.remove() }
+        var writer = ZipWriter()
+        writer.add(
+            "1.jpg", data: Data("x".utf8), method: .stored,
+            declaredUncompressedSize: 0xFFFF_FFFE)
+        let url = try write(writer, in: dir)
+
+        #expect(throws: ZipError.unsupported) { try ZipArchive(url: url) }
+    }
+
     @Test("rejects encrypted entries as unsupported")
     func encrypted() throws {
         let dir = try TemporaryDirectory()

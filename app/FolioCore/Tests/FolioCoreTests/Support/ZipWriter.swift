@@ -12,10 +12,14 @@ struct ZipWriter {
     var zip64: Bool = false
     var encryptedFlag: Bool = false
 
-    private var entries: [(name: String, data: Data, method: Method)] = []
+    private var entries: [(name: String, data: Data, method: Method, declaredSize: UInt32)] = []
 
-    mutating func add(_ name: String, data: Data, method: Method) {
-        entries.append((name, data, method))
+    /// `declaredUncompressedSize` overrides the size written to the headers, to build
+    /// archives whose headers lie about an entry.
+    mutating func add(
+        _ name: String, data: Data, method: Method, declaredUncompressedSize: Int? = nil
+    ) {
+        entries.append((name, data, method, UInt32(declaredUncompressedSize ?? data.count)))
     }
 
     func write(to url: URL) throws {
@@ -39,7 +43,7 @@ struct ZipWriter {
             archive.append(le32: 0)  // modification time and date
             archive.append(le32: useDataDescriptor ? 0 : crc)
             archive.append(le32: useDataDescriptor ? 0 : UInt32(payload.count))
-            archive.append(le32: useDataDescriptor ? 0 : UInt32(entry.data.count))
+            archive.append(le32: useDataDescriptor ? 0 : entry.declaredSize)
             archive.append(le16: UInt16(name.count))
             archive.append(le16: 0)
             archive.append(name)
@@ -48,7 +52,7 @@ struct ZipWriter {
                 archive.append(le32: 0x0807_4b50)
                 archive.append(le32: crc)
                 archive.append(le32: UInt32(payload.count))
-                archive.append(le32: UInt32(entry.data.count))
+                archive.append(le32: entry.declaredSize)
             }
 
             centralDirectory.append(le32: 0x0201_4b50)
@@ -59,7 +63,7 @@ struct ZipWriter {
             centralDirectory.append(le32: 0)
             centralDirectory.append(le32: crc)
             centralDirectory.append(le32: UInt32(payload.count))
-            centralDirectory.append(le32: UInt32(entry.data.count))
+            centralDirectory.append(le32: entry.declaredSize)
             centralDirectory.append(le16: UInt16(name.count))
             centralDirectory.append(le16: 0)  // extra length
             centralDirectory.append(le16: 0)  // comment length

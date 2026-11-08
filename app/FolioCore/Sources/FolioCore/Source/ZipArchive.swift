@@ -24,6 +24,10 @@ public struct ZipArchive: Sendable {
         let localHeaderOffset: UInt64
     }
 
+    /// Largest entry Folio extracts. Entries are decoded in memory, so a header
+    /// declaring more is rejected before anything is allocated for it.
+    public static let maxEntrySize = 256 * 1024 * 1024
+
     private static let endSignature: UInt32 = 0x0605_4b50
     private static let zip64LocatorSignature: UInt32 = 0x0706_4b50
     private static let centralSignature: UInt32 = 0x0201_4b50
@@ -157,6 +161,9 @@ public struct ZipArchive: Sendable {
         if compressedSize == 0xFFFF_FFFF || uncompressedSize == 0xFFFF_FFFF
             || localHeaderOffset == 0xFFFF_FFFF
         {
+            throw .unsupported
+        }
+        if Int(compressedSize) > maxEntrySize || Int(uncompressedSize) > maxEntrySize {
             throw .unsupported
         }
 
