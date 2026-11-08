@@ -108,6 +108,13 @@ more verbosity. `build/` is gitignored.
 (`app/Config/Release.xcconfig`) — worth doing before the first archive, since
 nothing in the normal loop exercises it.
 
+Manual iOS checks need `SIMULATOR=<udid of a single-display iPhone>` (for
+example `SIMULATOR=<udid> ./scripts/run.sh ios`): taps do not land on the
+two-display "iPhone Duo" simulator the scripts pick by default.
+
+In DEBUG builds only, launching with `FOLIO_DEBUG_NOTICES=2` queues two test
+Notices so their presentation can be checked by hand.
+
 `verify.sh` runs format → build → test → run (with a screenshot) for every
 enabled platform. Set `SKIP_LAUNCH=1` to skip only the launch step — format,
 build, and test still run for every platform. Used on headless CI, where
@@ -128,6 +135,10 @@ launching and screenshotting a simulator or app window is unreliable.
   `Debug-iphonesimulator`). Restore compact `{}` entries afterwards so the diff
   shows only the new keys.
 - Warnings are errors. Do not silence one without recording the reason.
+- An action the user takes either visibly succeeds or visibly fails. A `catch`
+  that only logs is a defect unless a comment at the site says why nothing the
+  user sees depends on it. Every operation has a test that forces its failure
+  and asserts the Notice.
 
 ## Documentation
 

@@ -165,3 +165,86 @@ repository failures through its own OSLog logger (category "library") rather
 than swallowing them: the failure path retries its Import update once and
 always clears the in-memory running state. The slice was built on a feature
 branch in place rather than a worktree, since nothing else was in flight.
+
+## 2026-11-08: Visible Failures
+
+Terms used below that are not in the glossary: a *typed throw* is a Swift
+function that declares exactly which error type it can throw, so the compiler
+rejects any other error escaping it; a *catch* is the code that handles a
+failed step; *logging* is writing a line to the system's diagnostic log, which
+the user never sees.
+
+**Every failure is presented, because logging is diagnostics, not an outcome.**
+Before this slice, many failures (a rename that could not be saved, a Book
+that could not be deleted) only wrote a log line, so the user saw the action
+seem to work or silently do nothing. Now an action either visibly succeeds or
+shows a Notice. The codebase rule in `CLAUDE.md` says a catch that only logs is
+a defect unless a comment starting `// Log-only:` at that spot says why
+nothing the user sees depends on it, and each operation has a test that forces
+its failure and checks the Notice.
+
+**The Library's failures are one typed `LibraryError`, enforced by the
+compiler.** Every public Library operation now declares that it throws only
+`LibraryError`, so a new failure path cannot reach the app as an unexplained
+error: the code will not compile until it is mapped to a case that carries the
+operation (such as "Rename" or "Delete Book") and so produces a Notice with
+the right title. Anything unexpected inside an operation is logged and
+reported as a storage failure for that operation.
+
+**Failures with no caller become `LibraryStorageFailed` events.** Some work
+happens in the background with nobody waiting for an answer: the Import
+scheduler, launch recovery, tidying Book folders, deleting a Book's folder
+after its record is gone. These announce `LibraryStorageFailed` with the
+operation, and the app turns it into a Notice, so the user still hears that
+what they see may be out of date.
+
+**Notices queue, and only an exact repeat of the last one collapses.** If
+several things fail, the user sees each Notice in turn, one at a time. A Notice
+with the same title and message as the one queued just before it is dropped, so
+one broken disk does not produce the same alert ten times. Different Notices
+are never merged. In the worst case a fully broken store at launch shows
+"Couldn't Open the Library" and then one "Couldn't Update the Library".
+
+**One failure at launch gives one Notice.** When launch cannot read the
+in-progress Imports, the app also tries to reload the Library and that reload
+fails for the same reason. The reload's failure is only logged, because the
+"Couldn't Open the Library" Notice already says it. The price is that a
+separate read failure in the same instant is hidden; we accepted that. The
+same rule applies to the reload that follows a `LibraryStorageFailed` event.
+
+**An Import whose status cannot be saved is skipped until relaunch.** If a
+Queued Import cannot be marked In Progress, and then cannot be marked Failed
+either (a full disk, for example), the scheduler would pick it again
+immediately and flood the user with Notices. It is now left alone for the rest
+of the session, matching the Notice's "relaunch Folio" wording. The cost is one
+relaunch for the user; the Import runs again after it.
+
+**A file-picker failure is a Notice too.** If the system file picker itself
+reports an error there is no Source name to show, but the principle admits no
+exception: the Notice is titled "Couldn't Import" and says "Folio couldn't open
+the file picker. Try again."
+
+**The alert hand-over: only OK removes a Notice.** The Library shows one Notice
+at a time in a system alert. Pressing OK (or Escape) is the only thing that
+removes the Notice from the queue. If the alert closes any other way (the
+system hides it), the Notice stays queued and is shown again, so a Notice is
+never lost unseen. The next queued Notice appears only after the previous alert
+has fully closed, 150 ms later, because SwiftUI will not reliably show a new
+alert while the old one is still closing. The delay is empirical; if it is too
+short the next Notice is hidden and shown again, never lost. This was
+checked on the Mac and on a single-display iPhone simulator.
+
+**`start()` keeps its typed throw.** The plan said Library `start()` would stop
+throwing and announce an event. Task 1 had already made it throw
+`.storage(.openLibrary)` when the in-progress Imports cannot be read, and that
+stays: a caller is present, so the compiler can make sure it is handled, and
+the app turns it into the "Couldn't Open the Library" Notice. Failures for
+individual records inside `start()` have no caller and become
+`LibraryStorageFailed(.openLibrary)` events. The cost is that the same Notice
+copy can arrive by two routes.
+
+**Source not downloaded gets its own Notice copy.** The spec's copy table had
+no row for a Source that is not downloaded to the device (for example in
+iCloud). The Notice is titled "Couldn't Import “<Source>”" and reuses the
+existing reason text "Not downloaded to this device", matching the Failed
+card. Changing the wording later costs nothing.
