@@ -84,7 +84,11 @@ public struct ImportPipeline: Sendable {
             try fileManager.createDirectory(at: booksDirectory, withIntermediateDirectories: true)
         }
         let (stagingRoot, ownsRoot) = try makeStagingRoot()
-        defer { if ownsRoot { try? fileManager.removeItem(at: stagingRoot) } }
+        defer {
+            // Ignored: an owned staging root is a system item-replacement directory,
+            // which the system purges; nothing in the Library lists it.
+            if ownsRoot { try? fileManager.removeItem(at: stagingRoot) }
+        }
         let staging = stagingRoot.appending(path: folderName, directoryHint: .isDirectory)
         do {
             let pages = try await stagePages(from: source, into: staging, progress: progress)
@@ -98,6 +102,8 @@ public struct ImportPipeline: Sendable {
                 coverFileName: CoverImage.fileName, importedAt: importedAt,
                 lastOpenedAt: nil, readingPosition: nil)
         } catch {
+            // Ignored: staging is temporary storage nothing in the Library lists; launch
+            // clean-up or the system removes what is left, and the user is told `error`.
             try? fileManager.removeItem(at: staging)
             throw error
         }

@@ -425,7 +425,7 @@ public actor Library {
         record.pagesDone = done
         record.pagesTotal = total
         running = record
-        // Log-only: progress is shown from the events below, and launch recovery resets the
+        // Ignored: progress is shown from the events below, and launch recovery resets the
         // stored count, so a lost progress write changes nothing the user sees.
         try? await imports.update(record)
         continuation.yield(

@@ -45,6 +45,7 @@ public struct ZipArchive: Sendable {
     public init(url: URL) throws(ZipError) {
         self.url = url
         let handle = try Self.io { try FileHandle(forReadingFrom: url) }
+        // Ignored: the handle is read-only, so a failed close loses no data.
         defer { try? handle.close() }
 
         let fileSize = try Self.io { try handle.seekToEnd() }
@@ -101,6 +102,7 @@ public struct ZipArchive: Sendable {
         }
 
         let handle = try Self.io { try FileHandle(forReadingFrom: url) }
+        // Ignored: the handle is read-only, so a failed close loses no data.
         defer { try? handle.close() }
 
         for record in records {

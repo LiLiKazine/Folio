@@ -79,9 +79,10 @@ Remaining `// Log-only:` catches (`grep -rn "Log-only:" app/`):
 - `Library.swift:269`, creating the Books directory at launch: an Import that needs the directory ends Failed with its own reason.
 - `Library.swift:275`, removing leftover staging: leftover staging is temporary storage that nothing in the Library lists.
 - `Library.swift:317`, deleting an orphan folder: a folder without a record is not listed, so it only takes up space.
-- `Library.swift:428`, saving an Import's count of Pages copied: the count is shown from ImportProgressed events, and launch recovery resets the stored count.
 - `LibraryModel.swift:67`, reload after the launch step (`start()`) threw: the Open the Library Notice already covers this launch failure.
 - `LibraryModel.swift:79`, reload after a `LibraryStorageFailed` event: the storage Notice already covers it; a successful reload still refreshes the list.
+
+Calls whose failure is discarded without logging (`try?`, Swift's way of throwing an error away) carry `// Ignored:` with the reason instead (`grep -rn "Ignored:" app/`): the progress count save in `Library.swift`, staging removal in `ImportPipeline.swift`, closing a read-only zip in `ZipArchive.swift`, the folder check in `LibraryDropTarget.swift`, and the hand-over delay in `LibraryView.swift` and the DEBUG test hook in `LibraryModel.swift`.
 
 ## Manual verification still needed
 

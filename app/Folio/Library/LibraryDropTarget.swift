@@ -45,6 +45,8 @@
 
         /// A dropped folder's URL need not end in "/", so ask the file system too.
         nonisolated private static func isFolder(_ url: URL) -> Bool {
+            // Ignored: a URL whose kind cannot be read is treated as not a folder, and
+            // the drop is refused like any other unsupported item, visibly springing back.
             url.hasDirectoryPath
                 || (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
         }
