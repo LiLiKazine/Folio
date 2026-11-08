@@ -326,6 +326,91 @@ import UniformTypeIdentifiers
             ])
     }
 
+    /// One user operation and the single repository write it depends on.
+    struct WriteFailure: Sendable, CustomTestStringConvertible {
+        let operation: LibraryOperation
+        let failsImports: Bool
+        let call: RepositoryCall
+        /// The Notice title, spelled out rather than built from `operation`.
+        let title: String
+        var testDescription: String { title }
+    }
+
+    @Test(
+        "a failing repository write yields the operation's Couldn't Notice",
+        arguments: [
+            WriteFailure(
+                operation: .import, failsImports: true, call: .add, title: "Couldn't Import"),
+            WriteFailure(
+                operation: .cancelImport, failsImports: true, call: .update,
+                title: "Couldn't Cancel Import"),
+            WriteFailure(
+                operation: .retryImport, failsImports: true, call: .update,
+                title: "Couldn't Retry Import"),
+            WriteFailure(
+                operation: .removeImport, failsImports: true, call: .remove,
+                title: "Couldn't Remove Import"),
+            WriteFailure(
+                operation: .rename, failsImports: false, call: .update, title: "Couldn't Rename"),
+            WriteFailure(
+                operation: .open, failsImports: false, call: .update, title: "Couldn't Open"),
+            WriteFailure(
+                operation: .deleteBook, failsImports: false, call: .remove,
+                title: "Couldn't Delete Book"),
+        ])
+    func writeFailureNotice(_ failure: WriteFailure) async throws {
+        let bookID = BookID()
+        let book = Book(
+            id: bookID, title: "Vol 1", folderName: bookID.rawValue.uuidString,
+            pages: [Page(fileName: "0001.png")], coverFileName: CoverImage.fileName,
+            importedAt: .now, lastOpenedAt: nil, readingPosition: nil)
+        func importRecord(_ status: ImportStatus) -> Import {
+            Import(
+                id: ImportID(), status: status, sourceBookmark: Data(), sourceName: "Vol 2",
+                title: "Vol 2", pagesDone: 0, pagesTotal: nil,
+                failureReason: status == .failed ? .noImagesFound : nil, bookID: nil,
+                createdAt: .now, finishedAt: status == .failed ? .now : nil)
+        }
+        let queued = importRecord(.queued)
+        let failed = importRecord(.failed)
+        let bookRepository = FailingBookRepository()
+        let importRepository = FailingImportRepository()
+        try await bookRepository.add(book)
+        try await importRepository.add(queued)
+        try await importRepository.add(failed)
+        // The model is not started, so no Import scheduler runs the Queued Import.
+        let fixture = try makeFixture(books: bookRepository, imports: importRepository)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+        if failure.failsImports {
+            await importRepository.fail([failure.call])
+        } else {
+            await bookRepository.fail([failure.call])
+        }
+
+        switch failure.operation {
+        case .import:
+            await model.importSource(
+                fixture.root.appending(path: "Vol 3", directoryHint: .isDirectory))
+        case .cancelImport: await model.cancelImport(queued.id)
+        case .retryImport: await model.retryImport(failed.id)
+        case .removeImport: await model.removeImport(failed.id)
+        case .rename: await model.rename(book.id, to: "Volume One")
+        case .open: await model.open(book.id)
+        case .deleteBook: await model.removeBook(book.id)
+        case .updateLibrary, .openLibrary:
+            Issue.record("No operation set up for \(failure.operation.rawValue)")
+        }
+
+        #expect(
+            copy(of: model.notices) == [
+                [
+                    failure.title,
+                    "Folio couldn't save the change. Try again; if it keeps happening, relaunch Folio.",
+                ]
+            ])
+    }
+
     @Test("two failures queue two Notices in order; dismiss shows the second")
     func noticesQueue() async throws {
         let fixture = try makeFixture()

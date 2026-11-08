@@ -36,18 +36,46 @@ struct LibraryErrorTests {
             return book
         }
 
-        /// Runs the public operation that `operation` names against `book`.
-        func perform(_ operation: LibraryOperation, on book: Book) async throws(LibraryError) {
+        func addImport(status: ImportStatus) async throws -> Import {
+            let record = Import(
+                id: ImportID(), status: status, sourceBookmark: Data(), sourceName: "Source",
+                title: "Source", pagesDone: 0, pagesTotal: nil,
+                failureReason: status == .failed ? .noImagesFound : nil, bookID: nil,
+                createdAt: .now, finishedAt: status == .failed ? .now : nil)
+            try await imports.add(record)
+            return record
+        }
+
+        /// Runs the public operation that `operation` names: against `book`, against
+        /// a Queued Import to cancel, or against a Failed Import to retry or remove.
+        func perform(
+            _ operation: LibraryOperation, on book: Book, queued: Import, failed: Import
+        ) async throws(LibraryError) {
             switch operation {
             case .import:
                 _ = try await library.createImport(
                     from: directory.url.appending(path: "Source", directoryHint: .isDirectory))
+            case .cancelImport: try await library.cancelImport(id: queued.id)
+            case .retryImport: try await library.retryImport(id: failed.id)
+            case .removeImport: try await library.removeImport(id: failed.id)
             case .rename: try await library.rename(bookID: book.id, to: "Renamed")
             case .open: try await library.open(bookID: book.id)
             case .deleteBook: try await library.removeBook(id: book.id)
-            default: Issue.record("No operation set up for \(operation.rawValue)")
+            case .updateLibrary, .openLibrary:
+                Issue.record("No operation set up for \(operation.rawValue)")
             }
         }
+    }
+
+    /// Which repository a storage case fails.
+    enum Store: Sendable { case books, imports }
+
+    /// One operation and the single repository write it depends on.
+    struct StorageCase: Sendable, CustomTestStringConvertible {
+        let operation: LibraryOperation
+        let store: Store
+        let call: RepositoryCall
+        var testDescription: String { "\(operation.rawValue) → \(store).\(call)" }
     }
 
     @Test("rename with an empty Title throws emptyTitle")
@@ -102,20 +130,28 @@ struct LibraryErrorTests {
     @Test(
         "a repository write failure surfaces as storage(operation)",
         arguments: [
-            (RepositoryCall.add, LibraryOperation.import),  // createImport → imports.add
-            (.update, .rename),  // rename → books.update
-            (.update, .open),  // open → books.update
-            (.remove, .deleteBook),  // removeBook → books.remove
+            StorageCase(operation: .import, store: .imports, call: .add),
+            StorageCase(operation: .cancelImport, store: .imports, call: .update),
+            StorageCase(operation: .retryImport, store: .imports, call: .update),
+            StorageCase(operation: .removeImport, store: .imports, call: .remove),
+            StorageCase(operation: .rename, store: .books, call: .update),
+            StorageCase(operation: .open, store: .books, call: .update),
+            StorageCase(operation: .deleteBook, store: .books, call: .remove),
         ])
-    func storage(call: RepositoryCall, op: LibraryOperation) async throws {
+    func storage(_ storageCase: StorageCase) async throws {
         let fixture = try Fixture()
         defer { fixture.directory.remove() }
         let book = try await fixture.addBook()
-        await fixture.books.fail([call])
-        await fixture.imports.fail([call])
+        let queued = try await fixture.addImport(status: .queued)
+        let failed = try await fixture.addImport(status: .failed)
+        switch storageCase.store {
+        case .books: await fixture.books.fail([storageCase.call])
+        case .imports: await fixture.imports.fail([storageCase.call])
+        }
 
-        await #expect(throws: LibraryError.storage(op)) {
-            try await fixture.perform(op, on: book)
+        await #expect(throws: LibraryError.storage(storageCase.operation)) {
+            try await fixture.perform(
+                storageCase.operation, on: book, queued: queued, failed: failed)
         }
     }
 
