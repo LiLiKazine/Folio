@@ -32,7 +32,8 @@ Background Notices become a status line above the grid.
 
 The design rests on Apple's documentation: a presentation's condition is a
 binding, so "SwiftUI can reset the underlying value when the user dismisses
-the presentation"; an alert's value is set to false when an action is pressed;
+the presentation"; the SwiftUI `.alert` API writes its binding false when an
+action is pressed;
 `fileImporter` sets it to false when finished or cancelled; `sheet(item:)`
 "dismisses the sheet and replaces it with a new one" when the item changes;
 nothing documents a second request while one is showing. The Human Interface
@@ -106,19 +107,31 @@ handled events (`handledEventCount`).
 - App tests (`build/last-test.log`, macOS run): 61 tests in 7 suites passed.
 - `./scripts/verify.sh` (format, build, test, launch on iOS and macOS): green, exit 0.
 
-## Manual verification still needed
+## Manual verification
 
-On Mac, iPhone, and iPad:
+Verified by the owner on the Mac on 2026-11-08 (build 646e84b): ⌘I while a
+Notice is showing, then closing the Notice, opens the file picker; two
+Notices in a row appear one after the other; no dialog appears at launch.
+This is the evidence for the "a freshly created dialog appears when asked"
+behaviour that Apple's documentation does not cover.
 
-- Press ⌘I (Mac) or tap plus (iPhone, iPad) while a Notice is showing, then close the Notice: the file picker appears.
-- Two Notices in a row appear one after the other, each Close removing exactly one.
+Still to check when convenient:
+
+- iPhone and iPad: tap plus while a Notice is showing, then close it: the
+  file picker appears; two Notices in a row.
 - A background failure appears as the status line at the top, not as a dialog.
-- iPad: in Select mode, choose several Books, tap Delete, and confirm: exactly the Books chosen when Delete was tapped are deleted.
+- iPad: in Select mode, choose several Books, tap Delete, and confirm: exactly
+  the Books chosen when Delete was tapped are deleted.
 
 ## Follow-ups
 
 - No test pins the id formats, and the multi-delete ids are not asserted distinct beyond the merged test.
-- No test removes a waiting Notice when dialog and status Notices interleave.
-- The status line has no VoiceOver announcement (the spoken alert for blind users), and the dialog's title is read from the queue rather than from the presenting value.
-- The binding setters read the queue's current dialog when SwiftUI writes back; capturing the id when the binding is made would make a late write-back from a torn-down carrier unable to close the next dialog of the same kind. Also a stale comment on `renameTitle`, and a redundant duplicate check in `requestPresentedNotice`.
+- The dialog's title is read from the queue rather than from the presenting value.
 - The macOS launch screenshot in `verify.sh` captures whatever window is in front, not Folio.
+
+## Final review fixes
+
+- The dialog bindings now act only on the dialog that was on screen when the binding was made, so a late write-back of false from an old dialog cannot close the next one unseen. Tests: a repeated close of Notice A leaves Notice B on screen; with dialog and status Notices interleaved, only the one shown of each kind can be removed.
+- `cancelNoNotice` ends on a later Import's Notice, so the absence of a cancellation Notice is proven by event order.
+- A new status line is announced by VoiceOver (Apple's screen reader) with its title.
+- The stale `renameTitle` comment and the redundant duplicate check in `requestPresentedNotice` are gone; the carrier's comment and the design spec say which part of its behaviour is documented and which is observed.

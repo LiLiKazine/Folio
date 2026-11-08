@@ -47,6 +47,12 @@ struct LibraryWindow: View {
         #endif
         .background { dialogHost }
         .onChange(of: model.presentedNotice?.id, initial: true) { requestPresentedNotice() }
+        // A status line appears without taking focus, so VoiceOver says its title.
+        .onChange(of: model.statusNotice?.id) {
+            if let notice = model.statusNotice {
+                AccessibilityNotification.Announcement(notice.title).post()
+            }
+        }
     }
 
     /// Records the open, then pushes the Library's current copy of the Book, unless the

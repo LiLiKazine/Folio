@@ -153,6 +153,11 @@ double-click or Return, with no File menu item in this slice.
   the edge-swipe-back behaviour of a hidden back button is observed, not
   documented; a single tap waits out the double-tap window before the chrome
   toggles; after a resize a new cache could share the old one's identity.
+- Merging `main` into this branch (the Presentation Coordinator had landed
+  there) conflicted twice. `main` made VoiceOver announce a new status line
+  from `LibraryView`; this branch moved the status line to `LibraryWindow`,
+  so the announcement moved with it. In `DECISIONS.md` `main`'s edits to the
+  earlier sections were kept and the Reading section follows them.
 
 ## Commits
 
@@ -167,4 +172,5 @@ double-click or Return, with no File menu item in this slice.
 | 1d0ad87 | feat(reading): open a Book and turn its Pages |
 | 6e298f8 | docs(reading): record the Notice-over-the-open-Book check |
 | b7228a7 | docs(reading): record the reading rulings |
-| (this) | fix(reading): keep Page turns in order, open on the Library's copy, push once, cancel stale decodes, resize in steps |
+| 6e120d9 | fix(reading): keep Page turns in order, open on the Library's copy, push once, cancel stale decodes, resize in steps |
+| (merge) | Merge main into feature/reading |

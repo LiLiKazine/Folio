@@ -243,6 +243,8 @@ turns out too short on some device, the Notice would not appear and no later
 Notice would either until Folio is relaunched. This was checked on the Mac and on a single-display iPhone
 simulator.
 
+_Superseded on 2026-11-08 by the Presentation Coordinator section._
+
 **A Notice waits while another dialog on the Library screen is open.** The
 Library screen can only show one dialog at a time: the file picker, the Rename
 dialog, a delete confirmation, or a Notice. Before this fix, a Notice that
@@ -252,6 +254,8 @@ for the rest of the session. Now the Notice waits in the queue and appears
 150 ms after the other dialog closes. What the user sees: they finish or cancel
 what they were doing, and the Notice follows. This was checked by hand with
 the file picker on the Mac and on an iPhone simulator.
+
+_Superseded on 2026-11-08 by the Presentation Coordinator section._
 
 **The Library screen does not refresh itself until launch has finished.** The
 screen asks for a fresh list of Books and Imports whenever it appears or the app
@@ -293,6 +297,8 @@ file picker opens 150 ms later, the same pause a waiting Notice gets. Asking
 several times while waiting still opens it once. If another Notice is waiting
 too, whichever appears first is followed by the other.
 
+_Superseded on 2026-11-08 by the Presentation Coordinator section._
+
 ## 2026-11-08: Presentation Coordinator
 
 A *dialog* here is anything the Library screen puts over the grid and waits
@@ -312,7 +318,8 @@ first is shown, and the next appears when SwiftUI reports the first is closed.
 What the user experiences: pressing ⌘I (or the plus button) while a Notice is
 showing opens the picker as soon as the Notice is closed, and two Notices in
 a row appear one after the other. The design rests on what Apple documents:
-a presentation's condition is a binding, so "SwiftUI can reset the underlying
+a presentation's condition is a binding (a value the screen reads and that
+SwiftUI can also write back), so "SwiftUI can reset the underlying
 value when the user dismisses the presentation"; for a dialog "the system
 sets this value to false and dismisses" when an action is pressed; the file
 picker sets its flag to false when finished or cancelled; and `sheet(item:)`
@@ -322,7 +329,8 @@ new one". Closing is the only signal we use.
 **No delays and no guessed signals.** The old code waited 150 ms after a
 dialog closed before showing the next, a number found by trying. A delay can
 be too short on a slower device, and then a dialog is lost with no sign. We
-also do not poll, and we do not invent a "finished" signal that SwiftUI does
+also do not poll (check again and again, on a timer, whether something has
+happened), and we do not invent a "finished" signal that SwiftUI does
 not give. The only move to the next dialog is SwiftUI's own report that the
 current one closed.
 
@@ -365,9 +373,11 @@ and its tests, and the "is another dialog up" checks, were guard lists for
 the same gap. The 150 ms settle delay was a guessed timing. The debug hook
 `FOLIO_DEBUG_NOTICES`, which made a DEBUG build queue test Notices, and the
 test counter of handled events existed only to observe the old timing. None
-of them is needed once one queue decides what is shown. This supersedes the
-"Import asked for while a Notice is showing" paragraph under Visible Failures:
-the picker now opens when the Notice closes, with no 150 ms pause.
+of them is needed once one queue decides what is shown. This supersedes three
+paragraphs under Visible Failures ("How Notices are handed over on screen",
+"A Notice waits while another dialog on the Library screen is open", and "An
+Import asked for while a Notice is showing"): the next dialog, including the
+picker, now appears when the one before it closes, with no 150 ms pause.
 
 ## 2026-11-08: Reading
 
