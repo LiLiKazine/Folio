@@ -90,7 +90,7 @@ Calls whose failure is discarded without logging (`try?`, Swift's way of throwin
 
 ## Follow-ups
 
-- Untested paths: the launch step (`start()`) failing to read Imports, cancel/retry/remove-Import storage failures, the reason given when a Source has not finished downloading from iCloud (`sourceNotDownloaded`); the storage test fails both the Book and Import stores at once, and several event tests drain only the first event while asserting equality.
+- Untested paths: the reason given when a Source has not finished downloading from iCloud (`sourceNotDownloaded`); several event tests drain only the first event while asserting equality.
 - The bounded 300 ms event drains in `LibraryTests` (waits of 300 ms that collect events during a test) add about 2.4 s and can miss an event that arrives late.
 - Operation names inside Notice titles are English raw values and are not translatable; two tests that check only part of a Notice's text; an unneeded `@MainActor` (the marker that keeps a type on the screen's thread) sits on `NoticeTests`.
 - The test hook for DEBUG builds (`FOLIO_DEBUG_NOTICES=2`) queues before the Library has loaded.
