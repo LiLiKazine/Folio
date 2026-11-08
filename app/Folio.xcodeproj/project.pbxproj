@@ -1,0 +1,311 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		100000000000000000000022 /* FolioCore in Frameworks */ = {isa = PBXBuildFile; productRef = 100000000000000000000021 /* FolioCore */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		100000000000000000000006 /* Folio.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Folio.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		100000000000000000000007 /* FolioTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FolioTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		10000000000000000000000B /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
+		10000000000000000000000C /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		10000000000000000000000D /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		10000000000000000000000E /* Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Version.xcconfig; sourceTree = "<group>"; };
+		10000000000000000000000F /* macOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = macOS.entitlements; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		100000000000000000000008 /* Folio */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Folio;
+			sourceTree = "<group>";
+		};
+		100000000000000000000009 /* FolioTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = FolioTests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		100000000000000000000011 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000022 /* FolioCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		100000000000000000000014 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		100000000000000000000002 = {
+			isa = PBXGroup;
+			children = (
+				10000000000000000000000A /* Config */,
+				100000000000000000000008 /* Folio */,
+				100000000000000000000009 /* FolioTests */,
+				100000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		100000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000006 /* Folio.app */,
+				100000000000000000000007 /* FolioTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		10000000000000000000000A /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				10000000000000000000000B /* Shared.xcconfig */,
+				10000000000000000000000C /* Debug.xcconfig */,
+				10000000000000000000000D /* Release.xcconfig */,
+				10000000000000000000000E /* Version.xcconfig */,
+				10000000000000000000000F /* macOS.entitlements */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		100000000000000000000004 /* Folio */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 100000000000000000000016 /* Build configuration list for PBXNativeTarget "Folio" */;
+			buildPhases = (
+				100000000000000000000010 /* Sources */,
+				100000000000000000000011 /* Frameworks */,
+				100000000000000000000012 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				100000000000000000000008 /* Folio */,
+			);
+			name = Folio;
+			packageProductDependencies = (
+				100000000000000000000021 /* FolioCore */,
+			);
+			productName = Folio;
+			productReference = 100000000000000000000006 /* Folio.app */;
+			productType = "com.apple.product-type.application";
+		};
+		100000000000000000000005 /* FolioTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 100000000000000000000017 /* Build configuration list for PBXNativeTarget "FolioTests" */;
+			buildPhases = (
+				100000000000000000000013 /* Sources */,
+				100000000000000000000014 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				10000000000000000000001E /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				100000000000000000000009 /* FolioTests */,
+			);
+			name = FolioTests;
+			productName = FolioTests;
+			productReference = 100000000000000000000007 /* FolioTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		100000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					100000000000000000000004 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					100000000000000000000005 = {
+						CreatedOnToolsVersion = 26.0;
+						TestTargetID = 100000000000000000000004;
+					};
+				};
+			};
+			buildConfigurationList = 100000000000000000000015 /* Build configuration list for PBXProject "Folio" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 100000000000000000000002;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				100000000000000000000020 /* XCLocalSwiftPackageReference "FolioCore" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 100000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				100000000000000000000004 /* Folio */,
+				100000000000000000000005 /* FolioTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		100000000000000000000012 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		100000000000000000000010 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		100000000000000000000013 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		10000000000000000000001E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 100000000000000000000004 /* Folio */;
+			targetProxy = 10000000000000000000001F /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXContainerItemProxy section */
+		10000000000000000000001F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 100000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 100000000000000000000004;
+			remoteInfo = Folio;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin XCBuildConfiguration section */
+		100000000000000000000018 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 10000000000000000000000C /* Debug.xcconfig */;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		100000000000000000000019 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 10000000000000000000000D /* Release.xcconfig */;
+			buildSettings = {
+			};
+			name = Release;
+		};
+		10000000000000000000001A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		10000000000000000000001B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Release;
+		};
+		10000000000000000000001C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				PRODUCT_BUNDLE_IDENTIFIER = "io.lilikaine.github.folio.tests";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Folio.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Folio";
+			};
+			name = Debug;
+		};
+		10000000000000000000001D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				PRODUCT_BUNDLE_IDENTIFIER = "io.lilikaine.github.folio.tests";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Folio.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Folio";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		100000000000000000000015 /* Build configuration list for PBXProject "Folio" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				100000000000000000000018 /* Debug */,
+				100000000000000000000019 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		100000000000000000000016 /* Build configuration list for PBXNativeTarget "Folio" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				10000000000000000000001A /* Debug */,
+				10000000000000000000001B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		100000000000000000000017 /* Build configuration list for PBXNativeTarget "FolioTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				10000000000000000000001C /* Debug */,
+				10000000000000000000001D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		100000000000000000000020 /* XCLocalSwiftPackageReference "FolioCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = FolioCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		100000000000000000000021 /* FolioCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FolioCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 100000000000000000000001 /* Project object */;
+}

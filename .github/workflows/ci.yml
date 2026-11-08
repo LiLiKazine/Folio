@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  format:
+    # See build-test below for why this is macos-26, not macos-15.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check formatting
+        run: ./scripts/format.sh --check
+
+  build-test:
+    # macos-15's default Xcode (16.4) ships the iOS 18.5 SDK, which cannot
+    # resolve the simulator scripts/_common.sh picks (an available iPhone
+    # under the newest installed runtime — see resolve_simulator). macos-26
+    # (arm64; the current `macos-latest`) defaults to Xcode 26.5, whose iOS
+    # 26.5 runtime carries current iPhone models — see
+    # https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md
+    # ("Installed Simulators" table). Check that table before changing this
+    # label; don't just pin an older one because it looks safer.
+    runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ios, macos]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: ./scripts/build.sh ${{ matrix.platform }}
+      - name: Test
+        run: ./scripts/test.sh ${{ matrix.platform }}
