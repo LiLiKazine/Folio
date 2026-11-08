@@ -95,3 +95,18 @@ non-Completed Imports); domain events tell the screen when to refresh.
   because it relies on the repository processing writes in call order.
 - Repository failures on the scheduler's queue fetch and on recording a failure
   (after one retry) are logged through `LibraryLog` (OSLog, category "library").
+
+## Implementation notes: LibraryModel (Task 10)
+
+- `LibraryModel` (`@Observable @MainActor`) is the only consumer of
+  `Library.events`: `start()` starts the Library, loads, sets `isLoaded`, then
+  iterates the stream until its task is cancelled. Tests drive it through
+  `start()` and never iterate the stream themselves.
+- Only `importProgressed` skips the reload (it updates `liveProgress`); every
+  other change event reloads; `bookOpened` does nothing, so `open` never
+  reorders the grid.
+- `init(library:booksDirectory:)` takes the Books directory explicitly because
+  `ImportPipeline.booksDirectory` is internal to FolioCore; the app passes
+  `LibraryStorage.booksDirectory()`. Rejected: making the pipeline property
+  public just for Cover lookup.
+- Library errors are logged with `AppLog.library` and never thrown to the view.

@@ -10,4 +10,7 @@ enum AppLog {
 
     /// SwiftData store and the Books directory.
     static let persistence = Logger(subsystem: subsystem, category: "persistence")
+
+    /// The Library screen's model and the operations it sends to the Library.
+    static let library = Logger(subsystem: subsystem, category: "library")
 }
