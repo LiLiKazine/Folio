@@ -42,7 +42,9 @@ current.
   "second presentation" case cannot occur for anything Folio presents.
 - No timers, no settle delays, no guard lists.
 - Behaviour visible to the user is unchanged: same dialogs, same copy,
-  same actions, on iPhone, iPad, and Mac.
+  same actions. The coordinator lives in the shared Library screen, so it
+  applies identically on iPhone, iPad, and Mac; only what feeds the queue
+  differs per platform (⌘I on Mac, Select-mode delete on iPad).
 - The logic that decides what shows next is a pure value type with unit
   tests; the view only renders the coordinator's current Presentation.
 
@@ -125,7 +127,8 @@ A value type with no SwiftUI dependency:
   second picker request is ignored while one is current or pending; mixed
   sequence (Notice, picker, Rename, Notice) shows in order.
 - `LibraryModelTests`: unchanged (the Notice queue is unchanged).
-- Manual verification on Mac and on a single-display iPhone simulator with
+- Manual verification on Mac, on a single-display iPhone simulator, and on
+  an iPad simulator (including the Select-mode delete confirmation) with
   `FOLIO_DEBUG_NOTICES=sequence`, plus the owner's own sequence (⌘I while
   a Notice is showing, close it, picker appears).
 
