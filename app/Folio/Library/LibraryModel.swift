@@ -126,31 +126,31 @@ import Observation
     }
 
     func importSource(_ url: URL) async {
-        await perform(.import) {
+        await perform(.import) { () async throws(LibraryError) in
             _ = try await self.library.createImport(from: url)
         }
     }
 
     func cancelImport(_ id: ImportID) async {
-        await perform(.cancelImport) {
+        await perform(.cancelImport) { () async throws(LibraryError) in
             try await self.library.cancelImport(id: id)
         }
     }
 
     func retryImport(_ id: ImportID) async {
-        await perform(.retryImport) {
+        await perform(.retryImport) { () async throws(LibraryError) in
             try await self.library.retryImport(id: id)
         }
     }
 
     func removeImport(_ id: ImportID) async {
-        await perform(.removeImport) {
+        await perform(.removeImport) { () async throws(LibraryError) in
             try await self.library.removeImport(id: id)
         }
     }
 
     func rename(_ id: BookID, to title: String) async {
-        await perform(.rename) {
+        await perform(.rename) { () async throws(LibraryError) in
             try await self.library.rename(bookID: id, to: title)
         }
     }
@@ -158,13 +158,13 @@ import Observation
     /// Records the open but does not reload: the Library order refreshes the next
     /// time the screen appears, so the Book does not jump while the user taps it.
     func open(_ id: BookID) async {
-        await perform(.open) {
+        await perform(.open) { () async throws(LibraryError) in
             try await self.library.open(bookID: id)
         }
     }
 
     func removeBook(_ id: BookID) async {
-        await perform(.deleteBook) {
+        await perform(.deleteBook) { () async throws(LibraryError) in
             try await self.library.removeBook(id: id)
         }
     }
@@ -177,21 +177,15 @@ import Observation
 
     /// Runs the user's `operation`, queueing a Notice if it fails.
     private func perform(
-        _ operation: LibraryOperation, _ body: () async throws -> Void
+        _ operation: LibraryOperation, _ body: () async throws(LibraryError) -> Void
     ) async {
         do {
             try await body()
-        } catch let error as LibraryError {
+        } catch {
             AppLog.library.error(
                 "Could not \(operation.rawValue, privacy: .public): \(String(describing: error), privacy: .public)"
             )
             queue(Notice(error: error))
-        } catch {
-            // The Library throws only LibraryError, so this is a programming error.
-            AppLog.library.fault(
-                "Could not \(operation.rawValue, privacy: .public), unexpected error: \(String(describing: error), privacy: .public)"
-            )
-            queue(Notice(storageFailed: operation))
         }
     }
 
