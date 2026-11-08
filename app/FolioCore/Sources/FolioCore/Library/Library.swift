@@ -149,14 +149,21 @@ public actor Library {
         continuation.yield(.bookOpened(bookID, at: openedAt))
     }
 
+    /// Removes the record first, so a Book is never listed without its folder. A folder
+    /// that cannot be deleted is logged and left as an orphan for launch reconciliation.
     public func removeBook(id: BookID) async throws {
         let book = try await book(id: id)
-        let folder = booksDirectory.appending(path: book.folderName)
-        if fileManager.fileExists(atPath: folder.path) {
-            try fileManager.removeItem(at: folder)
-        }
         try await books.remove(id: id)
         continuation.yield(.bookRemoved(id))
+        let folder = booksDirectory.appending(path: book.folderName)
+        guard fileManager.fileExists(atPath: folder.path) else { return }
+        do {
+            try fileManager.removeItem(at: folder)
+        } catch {
+            LibraryLog.logger.error(
+                "Could not delete the folder of removed Book \(id.rawValue.uuidString, privacy: .public): \(String(describing: error), privacy: .public)"
+            )
+        }
     }
 
     // MARK: - Lookup

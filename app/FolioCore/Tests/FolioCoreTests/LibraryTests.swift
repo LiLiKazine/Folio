@@ -432,6 +432,25 @@ struct LibraryTests {
         #expect(try await fixture.books.allBooks() == [])
     }
 
+    @Test("removeBook removes the record even when its folder cannot be deleted")
+    func removeBookLockedFolder() async throws {
+        let fixture = try Fixture()
+        try await fixture.library.start()
+        let book = try await Self.importedBook(in: fixture)
+        let pages = fixture.booksDirectory.appending(path: "\(book.folderName)/pages")
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: pages.path)
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: 0o755], ofItemAtPath: pages.path)
+            fixture.directory.remove()
+        }
+
+        try await fixture.library.removeBook(id: book.id)
+
+        #expect(try await fixture.books.allBooks() == [])
+        #expect(try fixture.booksDirectoryContents() == [book.folderName])
+    }
+
     @Test("start returns In Progress to Queued and runs it")
     func recovery() async throws {
         let access = InMemorySourceAccess()
