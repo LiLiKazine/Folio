@@ -140,6 +140,20 @@ struct LibraryTests {
             return try directory.file(relative).deletingLastPathComponent()
         }
 
+        /// Every event `library.events` delivers within `duration`, for asserting that
+        /// nothing else follows.
+        func events(for duration: Duration) async -> [LibraryEvent] {
+            let stream = library.events
+            let collector = Task {
+                var seen: [LibraryEvent] = []
+                for await event in stream { seen.append(event) }
+                return seen
+            }
+            try? await Task.sleep(for: duration)
+            collector.cancel()
+            return await collector.value
+        }
+
         /// Drains `library.events` until one satisfies `done`, failing after 5 s.
         func events(
             until done: @escaping @Sendable (LibraryEvent) -> Bool,
@@ -416,7 +430,7 @@ struct LibraryTests {
             try await fixture.library.removeImport(id: ImportID())
         }
         try await fixture.library.removeImport(id: failed.id)
-        let events = try await fixture.events(until: { _ in true })
+        let events = await fixture.events(for: .milliseconds(300))
 
         #expect(events == [.importRemoved(failed.id)])
         #expect(try await fixture.imports.importRecord(id: failed.id) == nil)
@@ -434,7 +448,7 @@ struct LibraryTests {
             try await fixture.library.rename(bookID: book.id, to: "  \n ")
         }
         try await fixture.library.rename(bookID: book.id, to: "  Vol.3 ")
-        let events = try await fixture.events(until: { _ in true })
+        let events = await fixture.events(for: .milliseconds(300))
 
         #expect(events == [.bookRenamed(book.id, title: "Vol.3")])
         #expect(try await fixture.books.book(id: book.id)?.title == "Vol.3")
@@ -449,7 +463,7 @@ struct LibraryTests {
         try await fixture.books.add(book)
 
         try await fixture.library.open(bookID: book.id)
-        let events = try await fixture.events(until: { _ in true })
+        let events = await fixture.events(for: .milliseconds(300))
 
         #expect(events == [.bookOpened(book.id, at: openedAt)])
         #expect(try await fixture.books.book(id: book.id)?.lastOpenedAt == openedAt)
@@ -467,7 +481,7 @@ struct LibraryTests {
         #expect(try fixture.booksDirectoryContents() == [book.folderName])
 
         try await fixture.library.removeBook(id: book.id)
-        let events = try await fixture.events(until: { _ in true })
+        let events = await fixture.events(for: .milliseconds(300))
 
         #expect(events == [.bookRemoved(book.id)])
         #expect(try fixture.booksDirectoryContents() == [])
@@ -715,6 +729,24 @@ struct LibraryTests {
         #expect(try await fixture.imports.importRecord(id: empty.id)?.status == .inProgress)
     }
 
+    @Test(
+        "a Queued Import whose status cannot be saved emits libraryStorageFailed(.import) once, then is skipped"
+    )
+    func unsavableQueuedSkipped() async throws {
+        let imports = FailingImportRepository()
+        let fixture = try Fixture(imports: imports)
+        defer { fixture.directory.remove() }
+        let queued = Self.importRecord(status: .queued, createdAt: .now)
+        try await imports.add(queued)
+        await imports.fail([.update])
+
+        try await fixture.library.start()
+        let events = await fixture.events(for: .milliseconds(300))
+
+        #expect(events == [.libraryStorageFailed(.import)])
+        #expect(try await imports.importRecord(id: queued.id)?.status == .queued)
+    }
+
     @Test("a failing queue fetch emits libraryStorageFailed(.updateLibrary)")
     func queueFetch() async throws {
         let imports = FailingImportRepository()
@@ -757,7 +789,7 @@ struct LibraryTests {
         await books.fail([.remove])
 
         try await fixture.library.start()
-        let events = try await fixture.events(until: { _ in true })
+        let events = await fixture.events(for: .milliseconds(300))
 
         #expect(events == [.libraryStorageFailed(.updateLibrary)])
         #expect(try await books.allBooks() == [missingFolder])
@@ -773,7 +805,7 @@ struct LibraryTests {
         await books.fail([.allBooks])
 
         try await fixture.library.start()
-        let events = try await fixture.events(until: { _ in true })
+        let events = await fixture.events(for: .milliseconds(300))
 
         #expect(events == [.libraryStorageFailed(.updateLibrary)])
     }
@@ -790,7 +822,7 @@ struct LibraryTests {
         await imports.fail([.update])
 
         try await fixture.library.start()
-        let events = try await fixture.events(until: { _ in true })
+        let events = await fixture.events(for: .milliseconds(300))
 
         #expect(events == [.libraryStorageFailed(.openLibrary)])
         #expect(try await imports.importRecord(id: interrupted.id)?.status == .inProgress)
@@ -812,7 +844,7 @@ struct LibraryTests {
         await imports.fail([.update])
 
         try await fixture.library.start()
-        let events = try await fixture.events(until: { _ in true })
+        let events = await fixture.events(for: .milliseconds(300))
 
         #expect(events == [.libraryStorageFailed(.openLibrary)])
     }

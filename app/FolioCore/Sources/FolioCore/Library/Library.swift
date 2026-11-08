@@ -24,6 +24,10 @@ public actor Library {
     /// Imports cancelled while Queued. A queue fetch that was in flight during the
     /// cancel can still hand one to the scheduler, which must skip it. Cleared on retry.
     private var cancelledWhileQueued: Set<ImportID> = []
+    /// Imports whose Failed status could not be saved. Storage may still show one as
+    /// Queued, so the scheduler skips it for the rest of this session rather than
+    /// running it again at once and failing the same way. Cleared on retry.
+    private var unsavedFailures: Set<ImportID> = []
 
     public init(
         books: any BookRepository, imports: any ImportRepository,
@@ -139,6 +143,7 @@ public actor Library {
                 return
             }
             cancelledWhileQueued.remove(id)
+            unsavedFailures.remove(id)
             record.status = .queued
             record.pagesDone = 0
             record.pagesTotal = nil
@@ -344,7 +349,11 @@ public actor Library {
                 continuation.yield(.libraryStorageFailed(.updateLibrary))
                 break
             }
-            guard let next = queued.first(where: { !cancelledWhileQueued.contains($0.id) }) else {
+            guard
+                let next = queued.first(where: {
+                    !cancelledWhileQueued.contains($0.id) && !unsavedFailures.contains($0.id)
+                })
+            else {
                 if queueChanged { continue }
                 break
             }
@@ -391,8 +400,9 @@ public actor Library {
     }
 
     /// Marks the running Import Failed, retrying the write once. If both writes fail,
-    /// emits `libraryStorageFailed(.import)`; the record stays In Progress and returns to
-    /// Queued at next launch.
+    /// emits `libraryStorageFailed(.import)` and skips the Import for the rest of this
+    /// session; storage keeps it In Progress or Queued, and it runs again after the next
+    /// launch.
     private func recordFailure(_ record: Import, reason: ImportFailureReason) async {
         do {
             try await fail(record, reason: reason)
@@ -403,6 +413,7 @@ public actor Library {
                 LibraryLog.logger.error(
                     "Could not record Import \(record.id.rawValue.uuidString, privacy: .public) as Failed: \(String(describing: error), privacy: .public)"
                 )
+                unsavedFailures.insert(record.id)
                 continuation.yield(.libraryStorageFailed(.import))
             }
         }

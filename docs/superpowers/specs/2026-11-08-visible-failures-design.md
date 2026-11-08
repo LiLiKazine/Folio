@@ -94,6 +94,9 @@ only logging. Specifically:
   `Update the Library`
 - a Book record that could not be removed when its folder is missing (a half
   Book is now visible) → `Update the Library`
+- the Books folder could not be listed or the Book records could not be read
+  while checking each Book still has its folder at launch (a half Book may stay
+  visible) → `Update the Library`
 - a Book folder that could not be deleted after its record was removed →
   `Delete Book`
 - the Library failing to start (`Library.start()` threw before recovery) →
