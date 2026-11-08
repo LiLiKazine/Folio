@@ -21,14 +21,12 @@ struct FolioApp: App {
     var body: some Scene {
         WindowGroup {
             if let model {
-                NavigationStack {
-                    LibraryView(model: model)
-                }
-                .onAppear {
-                    if eventLoop == nil {
-                        eventLoop = Task { await model.start() }
+                LibraryWindow(model: model)
+                    .onAppear {
+                        if eventLoop == nil {
+                            eventLoop = Task { await model.start() }
+                        }
                     }
-                }
             } else {
                 Text("Folio couldn't open its Library.")
                     .foregroundStyle(.secondary)
