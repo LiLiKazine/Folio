@@ -6,7 +6,9 @@ import Observation
 /// `items` current by reloading when the Library announces a change.
 ///
 /// Every failure, thrown or announced as an event, queues a `Notice` for the view
-/// to show; none is only logged.
+/// to show, except two the owner ruled log-only while reading (reading design,
+/// "What the owner decided"): a failed Reading Position save (`turnPage`) and a
+/// failed record of an open (`open`, unless the Book is gone).
 @Observable @MainActor final class LibraryModel {
     private(set) var items: [LibraryItem] = []
     /// Pages done and total for Imports In Progress, updated without a reload.
@@ -134,9 +136,38 @@ import Observation
 
     /// Records the open but does not reload: the Library order refreshes the next
     /// time the screen appears, so the Book does not jump while the user taps it.
-    func open(_ id: BookID) async {
-        await perform(.open) { () async throws(LibraryError) in
-            try await self.library.open(bookID: id)
+    ///
+    /// Returns whether the Book may be shown: false only when the Library no longer
+    /// has it, which queues its Notice. A failure to record the open is logged and
+    /// the Book opens anyway.
+    @discardableResult
+    func open(_ id: BookID) async -> Bool {
+        do {
+            try await library.open(bookID: id)
+            return true
+        } catch .notFound {
+            AppLog.library.error("Could not open a Book the Library no longer has")
+            queue(Notice(error: .notFound(.open)))
+            return false
+        } catch {
+            // Log-only by the owner's ruling (reading design, "Opening"): the Pages are
+            // there and readable; a failed record changes only Library order.
+            AppLog.library.error(
+                "Could not record an open: \(String(describing: error), privacy: .public)")
+            return true
+        }
+    }
+
+    /// Moves the Book's Reading Position to the Page at `index`. Never queues a Notice.
+    func turnPage(_ id: BookID, to index: Int) async {
+        do {
+            try await library.turnPage(bookID: id, to: index)
+        } catch {
+            // Log-only by the owner's ruling (reading design, "A failed save while
+            // reading is suppressed"): the Page turn itself visibly succeeded.
+            AppLog.library.error(
+                "Could not save the Reading Position: \(String(describing: error), privacy: .public)"
+            )
         }
     }
 
@@ -146,8 +177,18 @@ import Observation
         }
     }
 
+    /// Removes each Book, queueing a Notice for each that cannot be removed.
+    func removeBooks(_ ids: Set<BookID>) async {
+        for id in ids { await removeBook(id) }
+    }
+
     func coverURL(for book: Book) -> URL {
         booksDirectory.appending(path: book.folderName).appending(path: book.coverFileName)
+    }
+
+    /// The file holding the Page at `index` of `book`.
+    func pageURL(for book: Book, at index: Int) -> URL {
+        booksDirectory.appending(path: book.folderName).appending(path: book.pages[index].fileName)
     }
 
     // MARK: - Private

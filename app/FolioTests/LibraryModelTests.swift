@@ -187,6 +187,16 @@ import UniformTypeIdentifiers
         [notice.title, notice.message]
     }
 
+    /// A Book of `pageCount` Pages named 0001.png, 0002.png, and so on.
+    private func makeBook(pageCount: Int = 1) -> Book {
+        let id = BookID()
+        return Book(
+            id: id, title: "Vol 1", folderName: id.rawValue.uuidString,
+            pages: (1...pageCount).map { Page(fileName: String(format: "%04d.png", $0)) },
+            coverFileName: CoverImage.fileName, importedAt: .now, lastOpenedAt: nil,
+            readingPosition: nil)
+    }
+
     private func startModel(_ model: LibraryModel) async throws -> Task<Void, Never> {
         let task = Task { await model.start() }
         try await waitUntil("the model is loaded") { model.isLoaded }
@@ -371,6 +381,124 @@ import UniformTypeIdentifiers
         #expect(books(in: model.items).first?.lastOpenedAt != nil)
     }
 
+    // MARK: - Reading
+
+    @Test("open on a storage failure opens anyway and queues no Notice")
+    func openStorageFailureOpens() async throws {
+        let bookRepository = FailingBookRepository()
+        let book = makeBook()
+        try await bookRepository.add(book)
+        let fixture = try makeFixture(books: bookRepository)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        await bookRepository.fail([.update])
+
+        let mayOpen = await fixture.model.open(book.id)
+
+        #expect(mayOpen)
+        #expect(fixture.model.notices.isEmpty)
+    }
+
+    @Test("open on a missing Book does not open and queues Couldn't Open")
+    func openMissingBook() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+
+        let mayOpen = await fixture.model.open(BookID())
+
+        #expect(!mayOpen)
+        #expect(
+            copy(of: fixture.model.notices) == [
+                ["Couldn't Open", "It's no longer in the Library."]
+            ]
+        )
+    }
+
+    enum TurnPageFailure: CaseIterable, Sendable {
+        case storageFails
+        case bookIsGone
+    }
+
+    @Test("turnPage failures queue no Notice", arguments: TurnPageFailure.allCases)
+    func turnPageFailureSilent(_ failure: TurnPageFailure) async throws {
+        let bookRepository = FailingBookRepository()
+        let book = makeBook(pageCount: 3)
+        try await bookRepository.add(book)
+        let fixture = try makeFixture(books: bookRepository)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let id: BookID
+        switch failure {
+        case .storageFails:
+            await bookRepository.fail([.update])
+            id = book.id
+        case .bookIsGone:
+            id = BookID()
+        }
+
+        await fixture.model.turnPage(id, to: 1)
+
+        #expect(fixture.model.notices.isEmpty)
+        #expect(try await bookRepository.book(id: book.id)?.readingPosition == nil)
+    }
+
+    @Test("a burst of turns leaves the last position stored, with no Notice")
+    func turnPageBurst() async throws {
+        let bookRepository = InMemoryBookRepository()
+        let book = makeBook(pageCount: 5)
+        try await bookRepository.add(book)
+        let fixture = try makeFixture(books: bookRepository)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+
+        for index in [1, 2, 3, 4, 2] {
+            await fixture.model.turnPage(book.id, to: index)
+        }
+
+        #expect(try await bookRepository.book(id: book.id)?.readingPosition == 2)
+        #expect(fixture.model.notices.isEmpty)
+    }
+
+    @Test("pageURL joins the Books directory, folder, and Page file name")
+    func pageURL() throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let book = makeBook(pageCount: 2)
+
+        #expect(
+            fixture.model.pageURL(for: book, at: 1)
+                == fixture.booksDirectory.appending(path: book.folderName)
+                .appending(path: "0002.png"))
+    }
+
+    @Test("removeBooks removes every Book it is given")
+    func removeBooks() async throws {
+        let bookRepository = InMemoryBookRepository()
+        let books = [makeBook(), makeBook(), makeBook()]
+        for book in books { try await bookRepository.add(book) }
+        let fixture = try makeFixture(books: bookRepository)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+
+        await fixture.model.removeBooks([books[0].id, books[2].id])
+
+        #expect(try await bookRepository.book(id: books[0].id) == nil)
+        #expect(try await bookRepository.book(id: books[1].id) != nil)
+        #expect(try await bookRepository.book(id: books[2].id) == nil)
+        #expect(fixture.model.notices.isEmpty)
+    }
+
+    @Test("removeBooks that cannot save queues the Couldn't Delete Book Notice")
+    func removeBooksFailure() async throws {
+        let bookRepository = FailingBookRepository()
+        let book = makeBook()
+        try await bookRepository.add(book)
+        let fixture = try makeFixture(books: bookRepository)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        await bookRepository.fail([.remove])
+
+        await fixture.model.removeBooks([book.id])
+
+        #expect(copy(of: fixture.model.notices).map(\.first) == ["Couldn't Delete Book"])
+        #expect(try await bookRepository.book(id: book.id) != nil)
+    }
+
     // MARK: - Notices
 
     @Test("an unavailable Source on import yields a Notice naming it")
@@ -447,8 +575,6 @@ import UniformTypeIdentifiers
             WriteFailure(
                 operation: .rename, failsImports: false, call: .update, title: "Couldn't Rename"),
             WriteFailure(
-                operation: .open, failsImports: false, call: .update, title: "Couldn't Open"),
-            WriteFailure(
                 operation: .deleteBook, failsImports: false, call: .remove,
                 title: "Couldn't Delete Book"),
         ])
@@ -490,9 +616,10 @@ import UniformTypeIdentifiers
         case .retryImport: await model.retryImport(failed.id)
         case .removeImport: await model.removeImport(failed.id)
         case .rename: await model.rename(book.id, to: "Volume One")
-        case .open: await model.open(book.id)
         case .deleteBook: await model.removeBook(book.id)
-        case .updateLibrary, .openLibrary:
+        case .open, .turnPage, .updateLibrary, .openLibrary:
+            // Open and Turn Page are log-only (reading design), so they have no row here;
+            // their tests below assert that no Notice appears.
             Issue.record("No operation set up for \(failure.operation.rawValue)")
         }
 
