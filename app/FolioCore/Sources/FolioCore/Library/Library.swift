@@ -42,10 +42,10 @@ public actor Library {
 
     /// Deletes leftover staging, removes Book records without folders and folders without records,
     /// returns In Progress Imports to Queued (or Completed when their Book was already
-    /// added), then starts the scheduler. Cleanup is best-effort: a step that fails is
-    /// logged and skipped, so recovery and the scheduler always run. Throws only
-    /// `LibraryError` — `.storage(.openLibrary)` when the In Progress Imports cannot be
-    /// read, after starting the scheduler anyway.
+    /// added), then starts the scheduler. A step that fails is skipped, so recovery and
+    /// the scheduler always run; one the user would notice also emits
+    /// `libraryStorageFailed`. Throws only `LibraryError` — `.storage(.openLibrary)` when
+    /// the In Progress Imports cannot be read, after starting the scheduler anyway.
     public func start() async throws(LibraryError) {
         defer { kick() }
         removeLeftoverStaging()
@@ -66,6 +66,7 @@ public actor Library {
             } catch {
                 Self.logCleanupFailure(
                     "recover Import \(record.id.rawValue.uuidString)", error: error)
+                continuation.yield(.libraryStorageFailed(.openLibrary))
             }
         }
     }
@@ -186,7 +187,8 @@ public actor Library {
     }
 
     /// Removes the record first, so a Book is never listed without its folder. A folder
-    /// that cannot be deleted is logged and left as an orphan for launch reconciliation.
+    /// that cannot be deleted is left as an orphan for launch reconciliation and emits
+    /// `libraryStorageFailed(.deleteBook)` after `bookRemoved`.
     /// Throws only `LibraryError`, naming `.deleteBook`.
     public func removeBook(id: BookID) async throws(LibraryError) {
         let book = try await storageGuard(.deleteBook) {
@@ -203,6 +205,7 @@ public actor Library {
             LibraryLog.logger.error(
                 "Could not delete the folder of removed Book \(id.rawValue.uuidString, privacy: .public): \(String(describing: error), privacy: .public)"
             )
+            continuation.yield(.libraryStorageFailed(.deleteBook))
         }
     }
 
@@ -258,17 +261,22 @@ public actor Library {
         do {
             try fileManager.createDirectory(at: booksDirectory, withIntermediateDirectories: true)
         } catch {
+            // Log-only: an Import that needs the directory ends Failed with its own reason.
             Self.logCleanupFailure("create the Books directory", error: error)
         }
         do {
             try pipeline.removeLeftoverStaging()
         } catch {
+            // Log-only: leftover staging is temporary files that nothing in the Library lists.
             Self.logCleanupFailure("remove leftover staging", error: error)
         }
     }
 
     /// Only folders named by a UUID are Book folders; anything else is left alone.
     /// Each record and folder is handled on its own, so one failure skips only itself.
+    /// A Book record that may be left without its folder emits
+    /// `libraryStorageFailed(.updateLibrary)`, since the user would see a Book that
+    /// cannot be read.
     private func reconcileBookFolders() async {
         let folders: Set<String>
         let allBooks: [Book]
@@ -280,6 +288,7 @@ public actor Library {
             allBooks = try await books.allBooks()
         } catch {
             Self.logCleanupFailure("reconcile Book folders", error: error)
+            continuation.yield(.libraryStorageFailed(.updateLibrary))
             return
         }
         var recorded: Set<String> = []
@@ -293,12 +302,14 @@ public actor Library {
             } catch {
                 Self.logCleanupFailure(
                     "remove Book \(book.id.rawValue.uuidString) without folder", error: error)
+                continuation.yield(.libraryStorageFailed(.updateLibrary))
             }
         }
         for orphan in folders.subtracting(recorded) {
             do {
                 try fileManager.removeItem(at: booksDirectory.appending(path: orphan))
             } catch {
+                // Log-only: a folder without a record is not listed, so it only takes up space.
                 Self.logCleanupFailure("remove orphan folder \(orphan)", error: error)
             }
         }
@@ -319,7 +330,8 @@ public actor Library {
     }
 
     /// Runs the oldest Queued Import until none remain. A cancelled Import ends this
-    /// task, so a fresh one is kicked for whatever is still Queued.
+    /// task, so a fresh one is kicked for whatever is still Queued. A queue that cannot be
+    /// read emits `libraryStorageFailed(.updateLibrary)` and waits for the next change.
     private func runQueue() async {
         while !Task.isCancelled {
             queueChanged = false
@@ -329,6 +341,7 @@ public actor Library {
             } catch {
                 LibraryLog.logger.error(
                     "Could not read Queued Imports: \(String(describing: error), privacy: .public)")
+                continuation.yield(.libraryStorageFailed(.updateLibrary))
                 break
             }
             guard let next = queued.first(where: { !cancelledWhileQueued.contains($0.id) }) else {
@@ -378,7 +391,8 @@ public actor Library {
     }
 
     /// Marks the running Import Failed, retrying the write once. If both writes fail,
-    /// the record stays In Progress and returns to Queued at next launch.
+    /// emits `libraryStorageFailed(.import)`; the record stays In Progress and returns to
+    /// Queued at next launch.
     private func recordFailure(_ record: Import, reason: ImportFailureReason) async {
         do {
             try await fail(record, reason: reason)
@@ -389,6 +403,7 @@ public actor Library {
                 LibraryLog.logger.error(
                     "Could not record Import \(record.id.rawValue.uuidString, privacy: .public) as Failed: \(String(describing: error), privacy: .public)"
                 )
+                continuation.yield(.libraryStorageFailed(.import))
             }
         }
     }
@@ -399,6 +414,8 @@ public actor Library {
         record.pagesDone = done
         record.pagesTotal = total
         running = record
+        // Log-only: progress is shown from the events below, and launch recovery resets the
+        // stored count, so a lost progress write changes nothing the user sees.
         try? await imports.update(record)
         continuation.yield(
             isFirst

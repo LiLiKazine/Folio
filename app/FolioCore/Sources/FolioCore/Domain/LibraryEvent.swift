@@ -10,4 +10,7 @@ public enum LibraryEvent: Sendable, Equatable {
     case bookRenamed(BookID, title: String)
     case bookOpened(BookID, at: Date)
     case bookRemoved(BookID)
+    /// A change the Library could not save or apply on the user's behalf, with no
+    /// caller to throw to; names what it was trying to do.
+    case libraryStorageFailed(LibraryOperation)
 }

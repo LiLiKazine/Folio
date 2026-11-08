@@ -141,6 +141,8 @@ import Observation
             }
         case .bookOpened:
             break
+        case .libraryStorageFailed:
+            break  // Task 3 presents this
         }
         handledEventCount += 1
     }

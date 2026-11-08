@@ -60,20 +60,41 @@ struct LibraryTests {
         func remove(id: ImportID) async throws { try await base.remove(id: id) }
     }
 
+    /// Import repository that cannot save a Failed status, so a test can show what the
+    /// Library does when an Import's failure cannot be recorded.
+    private actor UnsavableFailedImportRepository: ImportRepository {
+        private let base = InMemoryImportRepository()
+
+        func imports(status: ImportStatus) async throws -> [Import] {
+            try await base.imports(status: status)
+        }
+        func importRecord(id: ImportID) async throws -> Import? {
+            try await base.importRecord(id: id)
+        }
+        func add(_ record: Import) async throws { try await base.add(record) }
+        func update(_ record: Import) async throws {
+            if record.status == .failed { throw RepositoryFailure() }
+            try await base.update(record)
+        }
+        func remove(id: ImportID) async throws { try await base.remove(id: id) }
+    }
+
     private struct Fixture {
         let directory: TemporaryDirectory
         let booksDirectory: URL
         /// Stands in for the system temporary directory, which holds the fallback staging.
         let temporaryDirectory: URL
-        let books = InMemoryBookRepository()
+        let books: any BookRepository
         let imports: any ImportRepository
         let library: Library
 
         init(
             sourceAccess: any SourceAccess = InMemorySourceAccess(),
+            books: any BookRepository = InMemoryBookRepository(),
             imports: any ImportRepository = InMemoryImportRepository(),
             now: @escaping @Sendable () -> Date = { .now }
         ) throws {
+            self.books = books
             self.imports = imports
             directory = try TemporaryDirectory()
             booksDirectory = directory.url.appending(path: "Books", directoryHint: .isDirectory)
@@ -159,6 +180,11 @@ struct LibraryTests {
 
     private static func isFailed(_ event: LibraryEvent) -> Bool {
         if case .importFailed = event { return true }
+        return false
+    }
+
+    private static func isStorageFailed(_ event: LibraryEvent) -> Bool {
+        if case .libraryStorageFailed = event { return true }
         return false
     }
 
@@ -448,7 +474,9 @@ struct LibraryTests {
         #expect(try await fixture.books.allBooks() == [])
     }
 
-    @Test("removeBook removes the record even when its folder cannot be deleted")
+    @Test(
+        "removeBook removes the record even when its folder cannot be deleted, then emits libraryStorageFailed(.deleteBook)"
+    )
     func removeBookLockedFolder() async throws {
         let fixture = try Fixture()
         try await fixture.library.start()
@@ -462,7 +490,9 @@ struct LibraryTests {
         }
 
         try await fixture.library.removeBook(id: book.id)
+        let events = try await fixture.events(until: Self.isStorageFailed)
 
+        #expect(events == [.bookRemoved(book.id), .libraryStorageFailed(.deleteBook)])
         #expect(try await fixture.books.allBooks() == [])
         #expect(try fixture.booksDirectoryContents() == [book.folderName])
     }
@@ -593,6 +623,8 @@ struct LibraryTests {
             return
         }
         #expect(id == interrupted.id)
+        // Leftover staging and an orphan folder affect nothing the user sees.
+        #expect(!events.contains(where: Self.isStorageFailed))
         #expect(try await fixture.imports.importRecord(id: id)?.status == .completed)
         #expect(try fixture.booksDirectoryContents() == [orphanFolder, book.folderName].sorted())
         #expect(fixture.leftoverStaging() == [stagedFolder])
@@ -648,5 +680,152 @@ struct LibraryTests {
 
         #expect(events.last == .importFailed(id, sourceName: "Gone", reason: .sourceUnavailable))
         #expect(try await fixture.library.items().map(\.id) == ["import:\(id.rawValue.uuidString)"])
+    }
+
+    // MARK: - Failures without a caller
+
+    @Test(
+        "a Failed status that cannot be saved emits libraryStorageFailed(.import) and the next Import still runs"
+    )
+    func failedStatusUnsaved() async throws {
+        let access = InMemorySourceAccess()
+        let fixture = try Fixture(sourceAccess: access, imports: UnsavableFailedImportRepository())
+        defer { fixture.directory.remove() }
+        let base = Date.now
+        let empty = Self.importRecord(
+            status: .queued, createdAt: base,
+            bookmark: try access.bookmark(for: try fixture.folderSource("Empty", pageCount: 0)))
+        let next = Self.importRecord(
+            status: .queued, createdAt: base + 1,
+            bookmark: try access.bookmark(for: try fixture.folderSource("Next")))
+        try await fixture.imports.add(empty)
+        try await fixture.imports.add(next)
+
+        try await fixture.library.start()
+        let events = try await fixture.events(until: Self.isCompleted)
+
+        let storageFailure = try #require(events.firstIndex(of: .libraryStorageFailed(.import)))
+        guard case .importCompleted(let id, _) = events.last else {
+            Issue.record("no importCompleted in \(events)")
+            return
+        }
+        #expect(id == next.id)
+        #expect(storageFailure < events.count - 1)
+        #expect(events.filter(Self.isStorageFailed) == [.libraryStorageFailed(.import)])
+        #expect(try await fixture.imports.importRecord(id: empty.id)?.status == .inProgress)
+    }
+
+    @Test("a failing queue fetch emits libraryStorageFailed(.updateLibrary)")
+    func queueFetch() async throws {
+        let imports = FailingImportRepository()
+        let fixture = try Fixture(imports: imports)
+        defer { fixture.directory.remove() }
+        let source = try fixture.folderSource()
+        await imports.fail([.imports])
+
+        let stalled = try await fixture.library.createImport(from: source)
+        let events = try await fixture.events(until: Self.isStorageFailed)
+
+        #expect(
+            events == [
+                .importQueued(stalled, title: "Source"), .libraryStorageFailed(.updateLibrary),
+            ])
+
+        // The scheduler runs again on the next change.
+        await imports.succeed()
+        _ = try await fixture.library.createImport(from: source)
+        let later = try await fixture.events(until: { event in
+            if case .importCompleted(let id, _) = event { return id != stalled }
+            return false
+        })
+        #expect(
+            later.contains(where: { event in
+                if case .importCompleted(let id, _) = event { return id == stalled }
+                return false
+            }))
+    }
+
+    @Test(
+        "a Book record that cannot be removed in reconciliation emits libraryStorageFailed(.updateLibrary)"
+    )
+    func reconcileRecord() async throws {
+        let books = FailingBookRepository()
+        let fixture = try Fixture(books: books)
+        defer { fixture.directory.remove() }
+        let missingFolder = Self.book(importedAt: .now)
+        try await books.add(missingFolder)
+        await books.fail([.remove])
+
+        try await fixture.library.start()
+        let events = try await fixture.events(until: { _ in true })
+
+        #expect(events == [.libraryStorageFailed(.updateLibrary)])
+        #expect(try await books.allBooks() == [missingFolder])
+    }
+
+    @Test(
+        "Book records that cannot be read in reconciliation emit libraryStorageFailed(.updateLibrary)"
+    )
+    func reconcileRead() async throws {
+        let books = FailingBookRepository()
+        let fixture = try Fixture(books: books)
+        defer { fixture.directory.remove() }
+        await books.fail([.allBooks])
+
+        try await fixture.library.start()
+        let events = try await fixture.events(until: { _ in true })
+
+        #expect(events == [.libraryStorageFailed(.updateLibrary)])
+    }
+
+    @Test(
+        "start() with an In Progress Import that cannot be returned to Queued emits libraryStorageFailed(.openLibrary) and does not throw"
+    )
+    func startRecoveryRecord() async throws {
+        let imports = FailingImportRepository()
+        let fixture = try Fixture(imports: imports)
+        defer { fixture.directory.remove() }
+        let interrupted = Self.importRecord(status: .inProgress, createdAt: .now)
+        try await imports.add(interrupted)
+        await imports.fail([.update])
+
+        try await fixture.library.start()
+        let events = try await fixture.events(until: { _ in true })
+
+        #expect(events == [.libraryStorageFailed(.openLibrary)])
+        #expect(try await imports.importRecord(id: interrupted.id)?.status == .inProgress)
+    }
+
+    @Test(
+        "start() with an In Progress Import that cannot be completed from its Book emits libraryStorageFailed(.openLibrary)"
+    )
+    func startRecoveryCompletion() async throws {
+        let imports = FailingImportRepository()
+        let fixture = try Fixture(imports: imports)
+        defer { fixture.directory.remove() }
+        let book = Self.book(importedAt: .now)
+        try fixture.directory.file("Books/\(book.folderName)/pages/0001.png")
+        try await fixture.books.add(book)
+        var interrupted = Self.importRecord(status: .inProgress, createdAt: .now)
+        interrupted.bookID = book.id
+        try await imports.add(interrupted)
+        await imports.fail([.update])
+
+        try await fixture.library.start()
+        let events = try await fixture.events(until: { _ in true })
+
+        #expect(events == [.libraryStorageFailed(.openLibrary)])
+    }
+
+    @Test("start() with unreadable In Progress Imports throws storage(.openLibrary)")
+    func startRecoveryRead() async throws {
+        let imports = FailingImportRepository()
+        let fixture = try Fixture(imports: imports)
+        defer { fixture.directory.remove() }
+        await imports.fail([.imports])
+
+        await #expect(throws: LibraryError.storage(.openLibrary)) {
+            try await fixture.library.start()
+        }
     }
 }
