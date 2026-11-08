@@ -52,6 +52,25 @@ Xcode — so a clean Xcode build is not evidence the package is warning-free. Ru
 script. `SWIFT_SUPPRESS_WARNINGS = NO` at the project level does not fix this;
 Xcode applies the flag to package targets directly.
 
+## Library and Import code
+
+`FolioCore` is organised by concern. `Domain/` holds the values (Book, Import,
+Reading Position), the Library events, the repository protocols, and in-memory
+repositories for tests. `Source/` scans a folder Source into ordered Pages,
+reads zips on Compression (`ZipArchive`, stored and deflate only), and defines
+the `SourceAccess` port. `Import/` is the atomic `ImportPipeline` (stage, copy
+Pages, render the Cover, move into place), Cover rendering, and the storage
+capacity check. `Library/` is the `Library` actor with its serial Import
+scheduler and launch recovery, the `LibraryItem` values the grid shows, and
+`LibraryLog`.
+
+The app target supplies the platform side. `Persistence/` holds the SwiftData
+models and repositories, `LibraryStorage` (the backup-excluded Books directory
+that also contains the store), and `FileSourceAccess` (security-scoped
+bookmarks). `Library/` holds `LibraryModel` (the only consumer of the Library's
+events) and the SwiftUI views, the Mac commands and drop target, and the iPad
+selection bar.
+
 ## Commands
 
 Use these rather than raw `xcodebuild`; they are the stable interface.
@@ -84,10 +103,17 @@ launching and screenshotting a simulator or app window is unreliable.
 ## Conventions
 
 - **Swift Testing**, not XCTest. See `app/FolioTests/SmokeTests.swift`.
-- **OSLog**, not `print`. Use `AppLog.general`, adding a category per subsystem.
+- **OSLog**, not `print`. Use `AppLog.general`, adding a category per subsystem;
+  `AppLog.library` and `AppLog.persistence` cover the Library and SwiftData code.
 - **SwiftUI** only; reach for UIKit/AppKit only when SwiftUI cannot do it, and
   record why in `DECISIONS.md`.
-- User-facing strings go in `Localizable.xcstrings`.
+- User-facing strings go in `Localizable.xcstrings`. `xcodebuild` never writes
+  the catalog, so sync it after adding strings, passing the stringsdata from
+  both platforms (otherwise platform-only strings are marked stale):
+  `xcrun xcstringstool sync app/Folio/Localizable.xcstrings --stringsdata <file> ...`
+  using the `*.stringsdata` files under DerivedData (`Debug` and
+  `Debug-iphonesimulator`). Restore compact `{}` entries afterwards so the diff
+  shows only the new keys.
 - Warnings are errors. Do not silence one without recording the reason.
 
 ## Documentation

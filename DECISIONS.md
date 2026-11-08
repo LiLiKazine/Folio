@@ -75,3 +75,79 @@ name; a UDID is unique by construction and every `simctl` subcommand accepts it.
 two displays and `simctl io screenshot` fails with EINVAL until one is named.
 `scripts/run.sh` retries on the primary display when that error appears, so the
 gate passes on foldable simulators without a manual flag.
+
+## 2026-11-08: Library and Import slice
+
+**Import is persisted at creation and run serially.** An Import is written to
+the store the moment the user picks a Source, with a status (Queued, In
+Progress, Failed, Completed), and the Library promotes the oldest Queued Import
+only when none is In Progress. A killed run therefore resumes at next launch,
+Retry has a record to act on, and memory and disk churn stay bounded on large
+zips. The Book record is written last, so there is never a half Book.
+
+**The Import gets its Book id before the pipeline runs.** The plan wrote the
+Book and then marked the Import Completed, which could leave a duplicate Book if
+the process died between the two writes. The Import now receives its Book id
+when it goes In Progress; launch recovery and Retry first look for a Book with
+that id and, if one exists, mark the Import Completed instead of re-running it.
+The cost is that In Progress and Failed Imports carry a Book id that points at
+no Book, so code must never read a non-nil id as "has a Book".
+
+**The SwiftData store lives inside the Books directory.** The Library store
+sits beside the Book folders in the backup-excluded directory under Application
+Support, so a restored device cannot have records without Pages or Pages
+without records. Launch reconciliation only considers folders whose name parses
+as a UUID, which leaves the store files and the `.staging` area alone.
+
+**Zip reader scope.** The reader handles stored and deflate entries, data
+descriptors, and UTF-8 names (with a CP437 fallback when the UTF-8 flag is
+absent), on Apple's Compression framework and with no dependency. It rejects
+zip64 and encrypted archives as unsupported, skips directory entries and
+`__MACOSX`, and refuses entries that would escape the destination. Each entry
+is decoded in memory, so a declared size over 256 MiB is rejected as
+unsupported before anything is allocated; this keeps the simple `Data` in,
+`Data` out interface while closing the zip-bomb hole, at the price of refusing
+a single Page larger than that. CRC-32 is not verified because Compression has
+no CRC function.
+
+**Stale bookmarks are accepted.** When a stored security-scoped bookmark
+resolves as stale, `FileSourceAccess` logs it and uses the resolved URL rather
+than failing. Failing a Retry because a folder moved once would punish the user
+for nothing. Refreshing and persisting a new bookmark needs an interface change
+and is a follow-up; until then a Retry can still fail later if the Source moves
+again.
+
+**Two more failure reasons.** The glossary's reasons did not cover everything
+the pipeline can hit, and mapping to an unrelated reason would mislead the
+user. `storageFailure` ("Couldn't write to Folio's storage") covers file-system
+errors during copy or move other than running out of space, which still reports
+`notEnoughStorage`. `undecodablePage` covers a first Page that ImageIO cannot
+decode, so no Cover can be made. If the storage capacity check itself throws,
+the preflight is skipped and the Import proceeds.
+
+**Reading Position is a 0-based index into the Book's Pages.** It matches the
+domain value (an index into the ordered Pages); the UI shows "Page n+1 of N".
+The reader slice must store it the same way.
+
+**The app owns the Library event loop.** `LibraryModel.start()` first ran from
+a window's `.task`, so closing a Mac window cancelled event handling for the
+rest of the process. `FolioApp` now starts it once, in an unstructured Task kept
+in `@State` beside the model and created the first time any scene body runs,
+independent of window lifetime. The Task lives for the process, which is
+acceptable for a single-model app. `LibraryModel` also takes the Books directory
+explicitly, because the pipeline's directory is internal to `FolioCore` and
+Cover lookup needs it.
+
+**The Mac sandbox gains bookmark entitlements.** Creating a security-scoped
+bookmark failed on macOS ("ScopedBookmarksAgent did not return error domain")
+because the sandbox lacked them. `app/Config/macOS.entitlements` now includes
+`com.apple.security.files.bookmarks.app-scope` and
+`com.apple.security.files.user-selected.read-only`; Folio only reads a Source
+and never writes back to it.
+
+**Smaller rulings.** A Title is the Source's own name with only a `.zip`
+extension stripped, so a folder called "Vol.3" keeps its dot. `FolioCore` logs
+repository failures through its own OSLog logger (category "library") rather
+than swallowing them: the failure path retries its Import update once and
+always clears the in-memory running state. The slice was built on a feature
+branch in place rather than a worktree, since nothing else was in flight.
