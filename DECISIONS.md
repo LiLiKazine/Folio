@@ -292,3 +292,79 @@ relaunched. Now the request waits: once the user closes the dialog, the
 file picker opens 150 ms later, the same pause a waiting Notice gets. Asking
 several times while waiting still opens it once. If another Notice is waiting
 too, whichever appears first is followed by the other.
+
+## 2026-11-08: Presentation Coordinator
+
+A *dialog* here is anything the Library screen puts over the grid and waits
+for the user to answer: a Notice about something the user just did, the file
+picker, the Rename box, and the Delete confirmations. A *status line* is a
+small message at the top of the Library, with a Close control, that does not
+block anything.
+
+**One source of truth for what is on screen.** The Library screen used to
+keep a separate on/off flag for each dialog, plus a list of checks for "is
+another dialog already up". SwiftUI (Apple's screen-building framework) shows
+one dialog at a time and its documentation says nothing about what happens
+when a second is requested while one is up. In practice the second was
+refused without a word, and the user saw the file picker never open again
+until relaunch. Now the screen holds one queue of requested dialogs; only the
+first is shown, and the next appears when SwiftUI reports the first is closed.
+What the user experiences: pressing ⌘I (or the plus button) while a Notice is
+showing opens the picker as soon as the Notice is closed, and two Notices in
+a row appear one after the other. The design rests on what Apple documents:
+a presentation's condition is a binding, so "SwiftUI can reset the underlying
+value when the user dismisses the presentation"; for a dialog "the system
+sets this value to false and dismisses" when an action is pressed; the file
+picker sets its flag to false when finished or cancelled; and `sheet(item:)`
+says "If item changes, the system dismisses the sheet and replaces it with a
+new one". Closing is the only signal we use.
+
+**No delays and no guessed signals.** The old code waited 150 ms after a
+dialog closed before showing the next, a number found by trying. A delay can
+be too short on a slower device, and then a dialog is lost with no sign. We
+also do not poll, and we do not invent a "finished" signal that SwiftUI does
+not give. The only move to the next dialog is SwiftUI's own report that the
+current one closed.
+
+**Background Notices are a status line, not a dialog.** Apple's Human
+Interface Guidelines say "Avoid using an alert merely to provide information"
+and "Avoid showing an alert when your app starts" ("alert" is their word for
+a dialog). A Notice about something the user did stays a dialog, because it
+answers their action. A Notice about a failure in the background (a
+LibraryStorageFailed event, or the Library failing to open or refresh at
+launch) now appears as a status line with the same text. What the user
+experiences: a launch-time problem no longer greets them with a dialog, and
+fewer dialogs queue behind one another. A dialog Notice and a status line
+Notice with identical text never merge into one, so a dialog cannot vanish
+into the status line.
+
+**Asking for the same thing twice is one request.** If a request is already
+showing or waiting, asking for it again is ignored. Pressing ⌘I twice while
+the picker waits opens it once, and a Rename for the same Book is not queued
+twice. This is a rule about identical requests, not a guess about what the
+user meant.
+
+**Each dialog is a fresh presentation.** Two dialogs of the same kind in a
+row (two Notices) could leave SwiftUI's on/off value true all the way
+through, so it might never show the second and the queue would wait forever.
+Each dialog now hangs on an invisible helper view whose identity changes with
+every dialog; SwiftUI documents that a changed identity makes a new view. The
+grid itself is not given a new identity, so its scroll position is kept.
+That a view which appears already asking to present will present its dialog
+is observed behaviour, not documented behaviour; the owner's manual check on
+Mac, iPhone, and iPad is the evidence (see the log's checklist).
+
+**Repeats are collapsed per kind.** A Notice identical to the one just queued
+is still not added again, but now only against Notices of the same kind
+(dialog or status line). Costs nothing visible.
+
+**What was removed, and why each was a workaround.** The per-dialog flags
+existed only because there was no single source of truth. The import request
+gate (a small object that held a picker request until other dialogs closed)
+and its tests, and the "is another dialog up" checks, were guard lists for
+the same gap. The 150 ms settle delay was a guessed timing. The debug hook
+`FOLIO_DEBUG_NOTICES`, which made a DEBUG build queue test Notices, and the
+test counter of handled events existed only to observe the old timing. None
+of them is needed once one queue decides what is shown. This supersedes the
+"Import asked for while a Notice is showing" paragraph under Visible Failures:
+the picker now opens when the Notice closes, with no 150 ms pause.

@@ -1,6 +1,6 @@
 # 2026-11-08-05: The Library screen presents every dialog from one queue
 
-**Status:** Implemented (owner's manual checks pending)
+**Status:** Decided; implemented, owner's manual checks pending
 
 ## Context
 
@@ -11,7 +11,7 @@ workaround layer: a 150 ms settle delay, an import request gate, and checks
 for "is another dialog up". A Notice could still be lost or block the picker.
 Background failures were also shown as dialogs, which the Human Interface
 Guidelines advise against. Design:
-`docs/superpowers/specs/2026-11-08-presentation-coordinator-design.md`.
+`docs/superpowers/specs/2026-11-08-presentation-coordinator-design.md`. The rulings are in `DECISIONS.md` ("Presentation Coordinator"). Terms: a *dialog* is anything the Library screen puts over the grid and waits for the user to answer; a *status line* is a small message at the top of the Library with a Close control; a *write-back of false* is SwiftUI (Apple's screen-building framework) switching a dialog's on/off value off when the dialog closes; a *queue* is a list that is shown one item at a time, in order.
 
 ## Options
 
@@ -30,11 +30,26 @@ Background Notices become a status line above the grid.
 
 ## Rationale
 
+The design rests on Apple's documentation: a presentation's condition is a
+binding, so "SwiftUI can reset the underlying value when the user dismisses
+the presentation"; an alert's value is set to false when an action is pressed;
+`fileImporter` sets it to false when finished or cancelled; `sheet(item:)`
+"dismisses the sheet and replaces it with a new one" when the item changes;
+nothing documents a second request while one is showing. The Human Interface
+Guidelines say "Avoid using an alert merely to provide information" and
+"Avoid showing an alert when your app starts".
+
 The design forbids delays, polling, and guard lists. A single optional
 current Presentation makes two dialogs on screen at once impossible, so no
 check is needed at the request sites.
 
 ## What Changed
+
+Removed, each a workaround for having no single source of truth: the
+per-dialog flags; `ImportRequestGate` and its tests; the "is another dialog
+up" checks; the 150 ms settle delay; the `FOLIO_DEBUG_NOTICES` debug hook
+(and its `CLAUDE.md` paragraph, removed in Task 2); and the test counter of
+handled events (`handledEventCount`).
 
 - `app/Folio/Library/LibraryView.swift`: flags and the workaround layer
   removed; one derived binding per dialog kind; the Notice dialog also
@@ -74,3 +89,36 @@ check is needed at the request sites.
   asked for while one waits.
 - The status line uses a top safe-area inset rather than a `VStack`, so the
   iOS large title still tracks the grid's scroll view.
+- A dialog Notice and a status line Notice with identical text never collapse
+  into each other (repeats collapse per kind), so a dialog cannot vanish into
+  the status line.
+- "A view that appears already asking to present will present" is observed,
+  not documented, SwiftUI behaviour. The carrier approach relies on it; the
+  owner's manual check is the evidence.
+- `CLAUDE.md` keeps the single-display-simulator note; the debug-hook
+  paragraph is gone.
+- Spec change: the Visible Failures design's copy table now has a
+  Presentation column (`dialog` or `status line`).
+
+## Gate
+
+- FolioCore: `swift test --package-path app/FolioCore -Xswiftc -warnings-as-errors`: 81 tests in 8 suites passed.
+- App tests (`build/last-test.log`, macOS run): 61 tests in 7 suites passed.
+- `./scripts/verify.sh` (format, build, test, launch on iOS and macOS): green, exit 0.
+
+## Manual verification still needed
+
+On Mac, iPhone, and iPad:
+
+- Press ⌘I (Mac) or tap plus (iPhone, iPad) while a Notice is showing, then close the Notice: the file picker appears.
+- Two Notices in a row appear one after the other, each Close removing exactly one.
+- A background failure appears as the status line at the top, not as a dialog.
+- iPad: in Select mode, choose several Books, tap Delete, and confirm: exactly the Books chosen when Delete was tapped are deleted.
+
+## Follow-ups
+
+- No test pins the id formats, and the multi-delete ids are not asserted distinct beyond the merged test.
+- No test removes a waiting Notice when dialog and status Notices interleave.
+- The status line has no VoiceOver announcement (the spoken alert for blind users), and the dialog's title is read from the queue rather than from the presenting value.
+- The binding setters read the queue's current dialog when SwiftUI writes back; capturing the id when the binding is made would make a late write-back from a torn-down carrier unable to close the next dialog of the same kind. Also a stale comment on `renameTitle`, and a redundant duplicate check in `requestPresentedNotice`.
+- The macOS launch screenshot in `verify.sh` captures whatever window is in front, not Folio.

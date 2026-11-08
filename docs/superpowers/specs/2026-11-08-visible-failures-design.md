@@ -113,14 +113,25 @@ into one Notice. Notices queue: a second failure does not overwrite the first.
 The Notice is a system alert with one `OK` button, titled by the operation
 and explained by the reason. Exact copy:
 
-| Failure | Title | Message |
-|---|---|---|
-| createImport, sourceUnavailable | `Couldn't Import “<Source>”` | `Folio couldn't open the folder or zip. Pick it again from the file picker.` |
-| any op, storage | `Couldn't <Operation>` | `Folio couldn't save the change. Try again; if it keeps happening, relaunch Folio.` |
-| rename, emptyTitle | `Couldn't Rename` | `A Book needs a Title.` |
-| any op, notFound | `Couldn't <Operation>` | `It's no longer in the Library.` |
-| any op, invalidStatus | `Couldn't <Operation>` | `That Import has already moved on.` |
-| LibraryStorageFailed(operation) | `Couldn't <Operation>` | `Folio couldn't save the change. What you see may be out of date; relaunch Folio to refresh.` |
+| Failure | Title | Message | Presentation |
+|---|---|---|---|
+| createImport, sourceUnavailable | `Couldn't Import “<Source>”` | `Folio couldn't open the folder or zip. Pick it again from the file picker.` | dialog |
+| any op, storage | `Couldn't <Operation>` | `Folio couldn't save the change. Try again; if it keeps happening, relaunch Folio.` | dialog |
+| rename, emptyTitle | `Couldn't Rename` | `A Book needs a Title.` | dialog |
+| any op, notFound | `Couldn't <Operation>` | `It's no longer in the Library.` | dialog |
+| any op, invalidStatus | `Couldn't <Operation>` | `That Import has already moved on.` | dialog |
+| LibraryStorageFailed(operation) | `Couldn't <Operation>` | `Folio couldn't save the change. What you see may be out of date; relaunch Folio to refresh.` | status line |
+
+Presentation: an action's Notice is a `dialog` (a system dialog the user must
+close, shown because they just did something). A Notice about a background
+failure, which no action of the user caused, is a `status line` (a small
+message at the top of the Library with a Close control): the
+LibraryStorageFailed row, `Open the Library`, and `Update the Library`. The
+Import-failure Notice (an Import that was created and then failed) is a
+`dialog`. Background Notices are shown as a status line per the Human
+Interface Guidelines, which say "Avoid using an alert merely to provide
+information" and "Avoid showing an alert when your app starts" (the
+guidelines' own word "alert" is the dialog described here).
 
 `<Operation>` values: `Import`, `Cancel Import`, `Retry Import`, `Remove
 Import`, `Rename`, `Open`, `Delete Book`, `Update the Library`, `Open the
