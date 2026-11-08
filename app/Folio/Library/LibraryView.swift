@@ -10,7 +10,7 @@ struct LibraryView: View {
     @Environment(\.scenePhase) private var scenePhase
     /// Every dialog this screen shows: the one on screen and those waiting.
     @State private var queue = PresentationQueue()
-    /// The Rename dialog's text field; seeded when a Rename becomes current.
+    /// The Rename dialog's text field; seeded when the Rename is asked for.
     @State private var renameTitle = ""
     #if os(macOS)
         /// The Book a single click selected; the target of the Delete key.

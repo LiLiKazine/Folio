@@ -54,7 +54,7 @@ handled events (`handledEventCount`).
 - `app/Folio/Library/LibraryView.swift`: flags and the workaround layer
   removed; one derived binding per dialog kind; the Notice dialog also
   removes its Notice from the model on any dismissal; Rename's text field is
-  seeded when a Rename becomes current; the iPad multi-delete uses the
+  seeded when the Rename is asked for; the iPad multi-delete uses the
   selection captured when Delete was tapped.
 - `app/Folio/Library/LibraryStatusLine.swift` (new): title, message, and a
   Close control, shown with `.safeAreaInset(edge: .top)`.
