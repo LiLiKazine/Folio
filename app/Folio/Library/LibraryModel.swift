@@ -5,19 +5,14 @@ import Observation
 /// The Library screen's state. Sends each operation to the `Library` and keeps
 /// `items` current by reloading when the Library announces a change.
 ///
-/// Errors from the Library are logged with `AppLog.library` and never reach the view.
+/// Every failure, thrown or announced as an event, queues a `Notice` for the view
+/// to show; none is only logged.
 @Observable @MainActor final class LibraryModel {
-    /// An Import that has just Failed, for the view to tell the user about.
-    struct FailureAlert: Identifiable, Equatable {
-        let id: ImportID
-        let sourceName: String
-        let reason: ImportFailureReason
-    }
-
     private(set) var items: [LibraryItem] = []
     /// Pages done and total for Imports In Progress, updated without a reload.
     private(set) var liveProgress: [ImportID: (done: Int, total: Int)] = [:]
-    var failureAlert: FailureAlert?
+    /// Failures not yet dismissed, oldest first.
+    private(set) var notices: [Notice] = []
     var isLoaded = false
     /// Events fully handled by `start()`; lets tests wait for an event that changes no state.
     private(set) var handledEventCount = 0
@@ -41,6 +36,7 @@ import Observation
         } catch {
             AppLog.library.error(
                 "Could not start the Library: \(String(describing: error), privacy: .public)")
+            queue(Notice(storageFailed: .openLibrary))
         }
         await reload()
         isLoaded = true
@@ -55,38 +51,45 @@ import Observation
         } catch {
             AppLog.library.error(
                 "Could not load the Library: \(String(describing: error), privacy: .public)")
+            queue(Notice(error: error))
         }
     }
 
+    /// The Notice the view shows now; the rest wait their turn.
+    var presentedNotice: Notice? { notices.first }
+
+    /// Removes the presented Notice, presenting the next one if any.
+    func dismissNotice() {
+        guard !notices.isEmpty else { return }
+        notices.removeFirst()
+    }
+
     func importSource(_ url: URL) async {
-        do {
-            _ = try await library.createImport(from: url)
-        } catch {
-            AppLog.library.error(
-                "Could not create an Import: \(String(describing: error), privacy: .public)")
+        await perform(.import) {
+            _ = try await self.library.createImport(from: url)
         }
     }
 
     func cancelImport(_ id: ImportID) async {
-        await perform("cancel Import \(id.rawValue.uuidString)") {
+        await perform(.cancelImport) {
             try await self.library.cancelImport(id: id)
         }
     }
 
     func retryImport(_ id: ImportID) async {
-        await perform("retry Import \(id.rawValue.uuidString)") {
+        await perform(.retryImport) {
             try await self.library.retryImport(id: id)
         }
     }
 
     func removeImport(_ id: ImportID) async {
-        await perform("remove Import \(id.rawValue.uuidString)") {
+        await perform(.removeImport) {
             try await self.library.removeImport(id: id)
         }
     }
 
     func rename(_ id: BookID, to title: String) async {
-        await perform("rename Book \(id.rawValue.uuidString)") {
+        await perform(.rename) {
             try await self.library.rename(bookID: id, to: title)
         }
     }
@@ -94,13 +97,13 @@ import Observation
     /// Records the open but does not reload: the Library order refreshes the next
     /// time the screen appears, so the Book does not jump while the user taps it.
     func open(_ id: BookID) async {
-        await perform("open Book \(id.rawValue.uuidString)") {
+        await perform(.open) {
             try await self.library.open(bookID: id)
         }
     }
 
     func removeBook(_ id: BookID) async {
-        await perform("remove Book \(id.rawValue.uuidString)") {
+        await perform(.deleteBook) {
             try await self.library.removeBook(id: id)
         }
     }
@@ -111,16 +114,31 @@ import Observation
 
     // MARK: - Private
 
+    /// Runs the user's `operation`, queueing a Notice if it fails.
     private func perform(
-        _ operation: String, _ body: () async throws -> Void
+        _ operation: LibraryOperation, _ body: () async throws -> Void
     ) async {
         do {
             try await body()
-        } catch {
+        } catch let error as LibraryError {
             AppLog.library.error(
-                "Could not \(operation, privacy: .public): \(String(describing: error), privacy: .public)"
+                "Could not \(operation.rawValue, privacy: .public): \(String(describing: error), privacy: .public)"
             )
+            queue(Notice(error: error))
+        } catch {
+            // The Library throws only LibraryError, so this is a programming error.
+            AppLog.library.fault(
+                "Could not \(operation.rawValue, privacy: .public), unexpected error: \(String(describing: error), privacy: .public)"
+            )
+            queue(Notice(storageFailed: operation))
         }
+    }
+
+    /// Appends `notice` unless it repeats the last one queued, so the same
+    /// failure reported twice in a row is shown once.
+    private func queue(_ notice: Notice) {
+        if let last = notices.last, last.says(notice) { return }
+        notices.append(notice)
     }
 
     private func handle(_ event: LibraryEvent) async {
@@ -135,14 +153,15 @@ import Observation
         case .importFailed(let id, let sourceName, let reason):
             liveProgress[id] = nil
             await reload()
-            // A cancellation the user asked for needs no alert; the Failed card remains.
+            // A cancellation the user asked for needs no Notice; the Failed card remains.
             if reason != .cancelled {
-                failureAlert = FailureAlert(id: id, sourceName: sourceName, reason: reason)
+                queue(Notice(importFailed: sourceName, reason: reason))
             }
         case .bookOpened:
             break
-        case .libraryStorageFailed:
-            break  // Task 3 presents this
+        case .libraryStorageFailed(let operation):
+            queue(Notice(storageFailed: operation))
+            await reload()
         }
         handledEventCount += 1
     }

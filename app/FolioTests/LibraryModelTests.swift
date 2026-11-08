@@ -32,6 +32,8 @@ import UniformTypeIdentifiers
     }
 
     private func makeFixture(
+        books: any BookRepository = InMemoryBookRepository(),
+        imports: any ImportRepository = InMemoryImportRepository(),
         sourceAccess: any SourceAccess = InMemorySourceAccess()
     ) throws -> Fixture {
         let root = FileManager.default.temporaryDirectory
@@ -40,7 +42,7 @@ import UniformTypeIdentifiers
         try FileManager.default.createDirectory(
             at: booksDirectory, withIntermediateDirectories: true)
         let library = Library(
-            books: InMemoryBookRepository(), imports: InMemoryImportRepository(),
+            books: books, imports: imports,
             pipeline: ImportPipeline(booksDirectory: booksDirectory),
             sourceAccess: sourceAccess)
         return Fixture(
@@ -98,6 +100,15 @@ import UniformTypeIdentifiers
         }
     }
 
+    /// The title and message of each queued Notice, in order.
+    private func copy(of notices: [Notice]) -> [[String]] {
+        notices.map { [$0.title, $0.message] }
+    }
+
+    private func copy(of notice: Notice) -> [String] {
+        [notice.title, notice.message]
+    }
+
     private func startModel(_ model: LibraryModel) async throws -> Task<Void, Never> {
         let task = Task { await model.start() }
         try await waitUntil("the model is loaded") { model.isLoaded }
@@ -126,10 +137,10 @@ import UniformTypeIdentifiers
                 .appending(path: book.coverFileName))
         #expect(FileManager.default.fileExists(atPath: model.coverURL(for: book).path))
         #expect(model.liveProgress.isEmpty)
-        #expect(model.failureAlert == nil)
+        #expect(model.notices.isEmpty)
     }
 
-    @Test("a failing Import sets the failure alert and keeps the Import item")
+    @Test("a failing Import queues its Notice and keeps the Import item")
     func failure() async throws {
         let fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -142,10 +153,9 @@ import UniformTypeIdentifiers
         try Data("not a Page".utf8).write(to: source.appending(path: "readme.txt"))
         await model.importSource(source)
 
-        try await waitUntil("the failure alert is set") { model.failureAlert != nil }
-        let alert = try #require(model.failureAlert)
-        #expect(alert.sourceName == "Notes")
-        #expect(alert.reason == .noImagesFound)
+        try await waitUntil("the Notice is queued") { model.presentedNotice != nil }
+        let notice = try #require(model.presentedNotice)
+        #expect(copy(of: notice) == ["Couldn't Import “Notes”", "No images found"])
 
         try await waitUntil("the Failed Import is the only item") {
             if model.items.count == 1, case .importRecord(let record) = model.items[0] {
@@ -154,12 +164,13 @@ import UniformTypeIdentifiers
             return false
         }
         guard case .importRecord(let record) = model.items[0] else { return }
-        #expect(record.id == alert.id)
-        #expect(model.liveProgress[alert.id] == nil)
+        #expect(record.sourceName == "Notes")
+        #expect(record.failureReason == .noImagesFound)
+        #expect(model.liveProgress[record.id] == nil)
     }
 
-    @Test("cancelling a Queued Import keeps the Failed item without an alert")
-    func cancelNoAlert() async throws {
+    @Test("cancel yields no Notice and keeps the Failed item")
+    func cancelNoNotice() async throws {
         let fixture = try makeFixture(sourceAccess: HeldSourceAccess())
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         let model = fixture.model
@@ -191,7 +202,7 @@ import UniformTypeIdentifiers
             model.handledEventCount == 3
         }
 
-        #expect(model.failureAlert == nil)
+        #expect(model.notices.isEmpty)
         let failed = model.items.compactMap { item -> Import? in
             if case .importRecord(let record) = item, record.status == .failed {
                 record
@@ -244,5 +255,173 @@ import UniformTypeIdentifiers
         await model.reload()
         #expect(books(in: model.items).map(\.title) == ["Older", "Newer"])
         #expect(books(in: model.items).first?.lastOpenedAt != nil)
+    }
+
+    // MARK: - Notices
+
+    @Test("an unavailable Source on import yields a Notice naming it")
+    func importUnavailableNotice() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "LibraryModelTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let source = root.appending(path: "Vol 3", directoryHint: .isDirectory)
+        var sourceAccess = InMemorySourceAccess()
+        sourceAccess.unbookmarkable = [source.path]
+        let fixture = try makeFixture(sourceAccess: sourceAccess)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+
+        await model.importSource(source)
+
+        #expect(
+            copy(of: model.notices) == [
+                [
+                    "Couldn't Import “Vol 3”",
+                    "Folio couldn't open the folder or zip. Pick it again from the file picker.",
+                ]
+            ])
+    }
+
+    @Test("a failing rename write yields a storage Notice for Rename")
+    func renameStorageNotice() async throws {
+        let bookRepository = FailingBookRepository()
+        let fixture = try makeFixture(books: bookRepository)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+        let task = try await startModel(model)
+        defer { task.cancel() }
+        await model.importSource(
+            try makeImageSource(named: "Vol 1", pageCount: 1, in: fixture.root))
+        try await waitUntil("the Book is in the Library") { books(in: model.items).count == 1 }
+        let book = try #require(books(in: model.items).first)
+
+        await bookRepository.fail([.update])
+        await model.rename(book.id, to: "Volume One")
+
+        #expect(
+            copy(of: model.notices) == [
+                [
+                    "Couldn't Rename",
+                    "Folio couldn't save the change. Try again; if it keeps happening, relaunch Folio.",
+                ]
+            ])
+    }
+
+    @Test("two failures queue two Notices in order; dismiss shows the second")
+    func noticesQueue() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+
+        await model.rename(BookID(), to: "  ")
+        await model.rename(BookID(), to: "Missing")
+
+        let first = ["Couldn't Rename", "A Book needs a Title."]
+        let second = ["Couldn't Rename", "It's no longer in the Library."]
+        #expect(copy(of: model.notices) == [first, second])
+        #expect(model.presentedNotice.map(copy(of:)) == first)
+        model.dismissNotice()
+        #expect(model.presentedNotice.map(copy(of:)) == second)
+        model.dismissNotice()
+        #expect(model.presentedNotice == nil)
+    }
+
+    @Test("a repeat of the last Notice is not queued again") func noticeRepeat() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+
+        await model.rename(BookID(), to: "")
+        await model.rename(BookID(), to: "")
+        await model.rename(BookID(), to: "Missing")
+        await model.rename(BookID(), to: "")
+
+        #expect(
+            copy(of: model.notices).map { $0[1] } == [
+                "A Book needs a Title.", "It's no longer in the Library.", "A Book needs a Title.",
+            ])
+    }
+
+    @Test("items() read failure yields Update the Library") func reloadNotice() async throws {
+        let bookRepository = FailingBookRepository()
+        let fixture = try makeFixture(books: bookRepository)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+        let task = try await startModel(model)
+        defer { task.cancel() }
+        #expect(model.notices.isEmpty)
+
+        await bookRepository.fail([.allBooks])
+        await model.reload()
+
+        #expect(
+            copy(of: model.notices) == [
+                [
+                    "Couldn't Update the Library",
+                    "Folio couldn't save the change. Try again; if it keeps happening, relaunch Folio.",
+                ]
+            ])
+    }
+
+    @Test("libraryStorageFailed event yields its Notice") func storageEventNotice() async throws {
+        let imports = FailingImportRepository()
+        let fixture = try makeFixture(imports: imports)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+        let task = try await startModel(model)
+        defer { task.cancel() }
+
+        // The Import is saved, but the scheduler cannot read the queue.
+        await imports.fail([.imports])
+        await model.importSource(
+            try makeImageSource(named: "Vol 1", pageCount: 1, in: fixture.root))
+
+        let expected = [
+            "Couldn't Update the Library",
+            "Folio couldn't save the change. What you see may be out of date; relaunch Folio to refresh.",
+        ]
+        try await waitUntil("the LibraryStorageFailed Notice is queued") {
+            copy(of: model.notices).contains(expected)
+        }
+    }
+
+    @Test("start recovery failure yields Open the Library through the event")
+    func startNotice() async throws {
+        let base = InMemoryImportRepository()
+        try await base.add(
+            Import(
+                id: ImportID(), status: .inProgress, sourceBookmark: Data("/gone".utf8),
+                sourceName: "Gone", title: "Gone", pagesDone: 1, pagesTotal: 2,
+                failureReason: nil, bookID: nil, createdAt: .now, finishedAt: nil))
+        let imports = FailingImportRepository(base: base)
+        await imports.fail([.update])
+        let fixture = try makeFixture(imports: imports)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+        let task = try await startModel(model)
+        defer { task.cancel() }
+
+        let expected = [
+            "Couldn't Open the Library",
+            "Folio couldn't open its Library. Relaunch Folio; if it keeps happening, free up storage.",
+        ]
+        try await waitUntil("the Open the Library Notice is queued") { !model.notices.isEmpty }
+        #expect(copy(of: model.notices) == [expected])
+    }
+
+    @Test("start failing to read In Progress Imports yields Open the Library first")
+    func startThrowsNotice() async throws {
+        let imports = FailingImportRepository()
+        await imports.fail([.imports])
+        let fixture = try makeFixture(imports: imports)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+        let task = try await startModel(model)
+        defer { task.cancel() }
+
+        #expect(
+            model.presentedNotice.map(copy(of:)) == [
+                "Couldn't Open the Library",
+                "Folio couldn't open its Library. Relaunch Folio; if it keeps happening, free up storage.",
+            ])
     }
 }

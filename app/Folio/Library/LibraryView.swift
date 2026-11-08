@@ -116,13 +116,15 @@ struct LibraryView: View {
                 Text("Its pages will be removed from Folio.")
             }
             .alert(
-                Text("Couldn't Import “\(model.failureAlert?.sourceName ?? "")”"),
-                isPresented: failureAlertIsPresented,
-                presenting: model.failureAlert
+                model.presentedNotice?.title ?? "",
+                isPresented: noticeIsPresented,
+                presenting: model.presentedNotice
             ) { _ in
-                Button("OK") {}
-            } message: { alert in
-                Text(alert.reason.localizedDescription)
+                // The cancel role makes Escape dismiss through this button too, so
+                // every way out removes exactly one Notice.
+                Button("OK", role: .cancel) { model.dismissNotice() }
+            } message: { notice in
+                Text(notice.message)
             }
             .onAppear {
                 Task { await model.reload() }
@@ -324,11 +326,10 @@ struct LibraryView: View {
         }
     }
 
-    private var failureAlertIsPresented: Binding<Bool> {
-        Binding(
-            get: { model.failureAlert != nil },
-            set: { if !$0 { model.failureAlert = nil } }
-        )
+    /// Dismissal goes through the OK button, which removes the Notice; the setter
+    /// must not remove another, or a queued Notice would be lost unseen.
+    private var noticeIsPresented: Binding<Bool> {
+        Binding(get: { model.presentedNotice != nil }, set: { _ in })
     }
 
     private func isPresenting(_ book: Binding<Book?>) -> Binding<Bool> {
