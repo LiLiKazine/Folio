@@ -12,6 +12,8 @@ struct LibraryView: View {
     @State private var bookToRename: Book?
     @State private var renameTitle = ""
     @State private var bookToDelete: Book?
+    /// The Notice the alert shows; see `showPresentedNotice()`.
+    @State private var shownNotice: Notice?
     #if os(macOS)
         /// The Book a single click selected; the target of the Delete key.
         @State private var selection: BookID?
@@ -116,16 +118,16 @@ struct LibraryView: View {
                 Text("Its pages will be removed from Folio.")
             }
             .alert(
-                model.presentedNotice?.title ?? "",
+                shownNotice?.title ?? "",
                 isPresented: noticeIsPresented,
-                presenting: model.presentedNotice
-            ) { _ in
-                // The cancel role makes Escape dismiss through this button too, so
-                // every way out removes exactly one Notice.
-                Button("OK", role: .cancel) { model.dismissNotice() }
+                presenting: shownNotice
+            ) { notice in
+                // The cancel role makes Escape dismiss through this button too.
+                Button("OK", role: .cancel) { dismiss(notice) }
             } message: { notice in
                 Text(notice.message)
             }
+            .onChange(of: model.presentedNotice?.id, initial: true) { showPresentedNotice() }
             .onAppear {
                 Task { await model.reload() }
             }
@@ -326,10 +328,34 @@ struct LibraryView: View {
         }
     }
 
-    /// Dismissal goes through the OK button, which removes the Notice; the setter
-    /// must not remove another, or a queued Notice would be lost unseen.
+    /// Shows the model's presented Notice. The alert is driven by `shownNotice`
+    /// rather than by the model directly so that between two queued Notices it is
+    /// cleared and set again after a yield: the alert's `isPresented` goes false
+    /// then true, which SwiftUI needs to present the second one. Bound straight
+    /// to the model, it would stay true across the hand-over and the second
+    /// Notice could fail to appear.
+    private func showPresentedNotice() {
+        shownNotice = nil
+        guard let next = model.presentedNotice else { return }
+        Task {
+            await Task.yield()
+            if model.presentedNotice?.id == next.id { shownNotice = next }
+        }
+    }
+
+    /// Removes `notice` from the model. The OK button and the alert's binding
+    /// both land here; the id check makes the second call do nothing, so a
+    /// waiting Notice is never removed unseen.
+    private func dismiss(_ notice: Notice) {
+        if model.presentedNotice?.id == notice.id { model.dismissNotice() }
+        if shownNotice?.id == notice.id { shownNotice = nil }
+    }
+
     private var noticeIsPresented: Binding<Bool> {
-        Binding(get: { model.presentedNotice != nil }, set: { _ in })
+        Binding(
+            get: { shownNotice != nil },
+            set: { if !$0, let shownNotice { dismiss(shownNotice) } }
+        )
     }
 
     private func isPresenting(_ book: Binding<Book?>) -> Binding<Bool> {

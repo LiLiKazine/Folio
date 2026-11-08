@@ -33,12 +33,16 @@ import Observation
     func start() async {
         do {
             try await library.start()
+            await reload()
         } catch {
             AppLog.library.error(
                 "Could not start the Library: \(String(describing: error), privacy: .public)")
             queue(Notice(storageFailed: .openLibrary))
+            await reloadAfterFailedStart()
         }
-        await reload()
+        #if DEBUG
+            queueDebugNotices()
+        #endif
         isLoaded = true
         for await event in library.events {
             await handle(event)
@@ -55,13 +59,37 @@ import Observation
         }
     }
 
+    /// Loads what it can after `library.start()` threw, without a second Notice.
+    private func reloadAfterFailedStart() async {
+        do {
+            items = try await library.items()
+        } catch {
+            // Log-only: the Open the Library Notice already covers this launch failure.
+            AppLog.library.error(
+                "Could not load the Library after it failed to start: \(String(describing: error), privacy: .public)"
+            )
+        }
+    }
+
+    #if DEBUG
+        /// Exists only for the manual check that a second Notice is presented after
+        /// the first is dismissed: launching with `FOLIO_DEBUG_NOTICES=2` queues two.
+        private func queueDebugNotices() {
+            guard ProcessInfo.processInfo.environment["FOLIO_DEBUG_NOTICES"] == "2" else { return }
+            queue(Notice(storageFailed: .updateLibrary))
+            queue(Notice(storageFailed: .deleteBook))
+        }
+    #endif
+
     /// The Notice the view shows now; the rest wait their turn.
     var presentedNotice: Notice? { notices.first }
 
     /// Removes the presented Notice, presenting the next one if any.
     func dismissNotice() {
         guard !notices.isEmpty else { return }
-        notices.removeFirst()
+        let notice = notices.removeFirst()
+        AppLog.library.info(
+            "Dismissed Notice \(notice.title, privacy: .public); \(self.notices.count) waiting")
     }
 
     func importSource(_ url: URL) async {

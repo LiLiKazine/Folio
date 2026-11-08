@@ -18,6 +18,26 @@ import UniformTypeIdentifiers
         let model: LibraryModel
     }
 
+    /// Import storage that cannot read In Progress Imports but reads everything
+    /// else, so only `Library.start()` and the model's reload fail; the scheduler,
+    /// which reads Queued Imports, does not.
+    private actor InProgressUnreadableImportRepository: ImportRepository {
+        private let base = InMemoryImportRepository()
+
+        func imports(status: ImportStatus) async throws -> [Import] {
+            if status == .inProgress { throw RepositoryFailure() }
+            return try await base.imports(status: status)
+        }
+
+        func importRecord(id: ImportID) async throws -> Import? {
+            try await base.importRecord(id: id)
+        }
+
+        func add(_ record: Import) async throws { try await base.add(record) }
+        func update(_ record: Import) async throws { try await base.update(record) }
+        func remove(id: ImportID) async throws { try await base.remove(id: id) }
+    }
+
     /// Source access that holds every Import inside `withAccess` until its task is
     /// cancelled, so the first Import stays In Progress and later ones stay Queued.
     private struct HeldSourceAccess: SourceAccess {
@@ -408,20 +428,22 @@ import UniformTypeIdentifiers
         #expect(copy(of: model.notices) == [expected])
     }
 
-    @Test("start failing to read In Progress Imports yields Open the Library first")
+    @Test("start failing to read In Progress Imports yields Open the Library and nothing else")
     func startThrowsNotice() async throws {
-        let imports = FailingImportRepository()
-        await imports.fail([.imports])
-        let fixture = try makeFixture(imports: imports)
+        let fixture = try makeFixture(imports: InProgressUnreadableImportRepository())
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         let model = fixture.model
         let task = try await startModel(model)
         defer { task.cancel() }
 
+        // The reload that follows reads In Progress Imports too and also fails, but
+        // one failure at launch is one Notice.
         #expect(
-            model.presentedNotice.map(copy(of:)) == [
-                "Couldn't Open the Library",
-                "Folio couldn't open its Library. Relaunch Folio; if it keeps happening, free up storage.",
+            copy(of: model.notices) == [
+                [
+                    "Couldn't Open the Library",
+                    "Folio couldn't open its Library. Relaunch Folio; if it keeps happening, free up storage.",
+                ]
             ])
     }
 }
