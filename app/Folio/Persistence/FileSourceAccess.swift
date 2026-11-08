@@ -3,8 +3,6 @@ import Foundation
 
 /// `SourceAccess` backed by security-scoped bookmarks, so a Failed Import can be retried later.
 struct FileSourceAccess: SourceAccess, Sendable {
-    /// How long to wait for an iCloud placeholder to download.
-    private static let downloadTimeout: Duration = .seconds(60)
     private static let pollInterval: Duration = .milliseconds(500)
 
     #if os(macOS)
@@ -15,7 +13,12 @@ struct FileSourceAccess: SourceAccess, Sendable {
         private static let resolutionOptions: URL.BookmarkResolutionOptions = []
     #endif
 
-    init() {}
+    /// How long to wait, in total, for a Source's iCloud files to download.
+    private let downloadTimeout: Duration
+
+    init(downloadTimeout: Duration = .seconds(60)) {
+        self.downloadTimeout = downloadTimeout
+    }
 
     func bookmark(for url: URL) throws(SourceAccessError) -> Data {
         do {
@@ -55,26 +58,119 @@ struct FileSourceAccess: SourceAccess, Sendable {
         return try await body(url)
     }
 
+    /// Makes sure the Source and, for a folder, every file inside it are downloaded
+    /// from iCloud: starts each pending download, then polls until all are current
+    /// or the timeout passes. Items outside iCloud have no status and pass at once.
     private func ensureDownloaded(_ url: URL) async throws {
-        guard try isPlaceholder(url) else { return }
-        do {
-            try FileManager.default.startDownloadingUbiquitousItem(at: url)
-        } catch {
-            AppLog.persistence.error("Starting iCloud download failed: \(error, privacy: .public)")
-            throw SourceAccessError.notDownloaded
+        let pending = try pendingDownloads(in: url)
+        guard !pending.isEmpty else { return }
+        for item in pending {
+            do {
+                try FileManager.default.startDownloadingUbiquitousItem(at: item.requestURL)
+            } catch {
+                AppLog.persistence.error(
+                    "Starting iCloud download failed: \(error, privacy: .public)")
+                throw SourceAccessError.notDownloaded
+            }
         }
-        let deadline = ContinuousClock.now + Self.downloadTimeout
-        while try isPlaceholder(url) {
-            guard ContinuousClock.now < deadline else { throw SourceAccessError.notDownloaded }
+        let deadline = ContinuousClock.now + downloadTimeout
+        var waiting = pending
+        while true {
+            waiting = try waiting.filter { try !$0.isDownloaded() }
+            if waiting.isEmpty { return }
+            guard ContinuousClock.now < deadline else {
+                AppLog.persistence.error(
+                    "\(waiting.count, privacy: .public) Source files still not downloaded")
+                throw SourceAccessError.notDownloaded
+            }
             try await Task.sleep(for: Self.pollInterval)
         }
     }
 
-    /// True when the item is an iCloud item that is not fully downloaded.
-    private func isPlaceholder(_ url: URL) throws -> Bool {
-        let status = try url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey])
-            .ubiquitousItemDownloadingStatus
-        guard let status else { return false }
-        return status != .current
+    /// The items under `url` that iCloud has not fully downloaded. A folder is walked
+    /// recursively: hidden files are skipped, except `.<name>.icloud` placeholders,
+    /// which stand for `<name>` in the same folder.
+    private func pendingDownloads(in url: URL) throws(SourceAccessError) -> [PendingDownload] {
+        guard try Self.resourceValues(of: url, [.isDirectoryKey]).isDirectory == true else {
+            return try PendingDownload.file(url).isDownloaded() ? [] : [.file(url)]
+        }
+        let keys: [URLResourceKey] = [.isRegularFileKey, .isHiddenKey]
+        guard
+            let enumerator = FileManager.default.enumerator(
+                at: url, includingPropertiesForKeys: keys, options: [],
+                errorHandler: { _, _ in true })
+        else { throw SourceAccessError.unavailable }
+        var pending: [PendingDownload] = []
+        for case let file as URL in enumerator {
+            let name = file.lastPathComponent
+            if let target = PendingDownload.placeholderTarget(of: name) {
+                pending.append(
+                    .placeholder(
+                        file, target: file.deletingLastPathComponent().appending(path: target)))
+                continue
+            }
+            let values = try Self.resourceValues(of: file, Set(keys))
+            guard values.isRegularFile == true, values.isHidden != true, !name.hasPrefix(".")
+            else { continue }
+            if try !PendingDownload.file(file).isDownloaded() {
+                pending.append(.file(file))
+            }
+        }
+        return pending
+    }
+
+    /// `resourceValues`, with any failure reported as an unavailable Source.
+    fileprivate static func resourceValues(
+        of url: URL, _ keys: Set<URLResourceKey>
+    ) throws(SourceAccessError) -> URLResourceValues {
+        do {
+            return try url.resourceValues(forKeys: keys)
+        } catch {
+            AppLog.persistence.error("Reading Source attributes failed: \(error, privacy: .public)")
+            throw .unavailable
+        }
+    }
+}
+
+/// One iCloud item a Source is waiting on.
+private enum PendingDownload {
+    /// A file whose downloading status is not current.
+    case file(URL)
+    /// A `.<name>.icloud` placeholder that becomes `target` once downloaded.
+    case placeholder(URL, target: URL)
+
+    /// The URL to pass to `startDownloadingUbiquitousItem`.
+    var requestURL: URL {
+        switch self {
+        case .file(let url), .placeholder(let url, _): url
+        }
+    }
+
+    /// `<name>` for a file named `.<name>.icloud`, else nil.
+    static func placeholderTarget(of name: String) -> String? {
+        let prefix = ".", suffix = ".icloud"
+        guard name.hasPrefix(prefix), name.hasSuffix(suffix),
+            name.count > prefix.count + suffix.count
+        else { return nil }
+        return String(name.dropFirst(prefix.count).dropLast(suffix.count))
+    }
+
+    func isDownloaded() throws(SourceAccessError) -> Bool {
+        let file: URL
+        switch self {
+        case .file(let url):
+            file = url
+        case .placeholder(let placeholder, let target):
+            let manager = FileManager.default
+            guard !manager.fileExists(atPath: placeholder.path),
+                manager.fileExists(atPath: target.path)
+            else { return false }
+            file = target
+        }
+        let status = try FileSourceAccess.resourceValues(
+            of: file, [.ubiquitousItemDownloadingStatusKey]
+        ).ubiquitousItemDownloadingStatus
+        guard let status else { return true }
+        return status == .current
     }
 }
