@@ -100,5 +100,5 @@ Calls whose failure is discarded without logging (`try?`, Swift's way of throwin
 ## Gate
 
 - FolioCore: `swift test` with every compiler warning treated as a failure (`-Xswiftc -warnings-as-errors`), 81 tests in 8 suites passed.
-- App tests (`build/last-test.log`, macOS run): 43 tests in 6 suites passed.
+- App tests (`build/last-test.log`, macOS run): 43 tests in 6 suites passed; 46 after the final review fixes (per-operation Notice test, Import Notice ordering, reload before launch).
 - `./scripts/verify.sh` (format, build, test, launch on iOS and macOS): green.
