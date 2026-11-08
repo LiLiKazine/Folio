@@ -10,7 +10,9 @@ public struct ImportFailure: Error, Equatable {
 /// Turns one Source into one Book folder atomically: every Page copied and the
 /// Cover rendered, or nothing left behind.
 public struct ImportPipeline: Sendable {
-    private static let stagingName = ".staging"
+    /// The folder under the system temporary directory used when no item-replacement
+    /// directory can be had for the Books directory's volume.
+    static let fallbackStagingName = "FolioImport"
     private static let pagesName = "pages"
     private static let expandedName = "expanded"
 
@@ -19,20 +21,55 @@ public struct ImportPipeline: Sendable {
     /// FileManager is not `Sendable`, but Apple documents its methods as thread-safe
     /// when no delegate is set; the pipeline never sets one.
     nonisolated(unsafe) private let fileManager: FileManager
+    /// The system temporary directory; the fallback staging folder lives under it.
+    private let temporaryDirectory: URL
+    /// Returns a fresh directory, owned by one run, on the same volume as the given
+    /// Books directory. The run deletes it when it ends.
+    private let stagingRootProvider: @Sendable (URL) throws -> URL
 
     public init(
         booksDirectory: URL,
         storage: StorageCapacity = VolumeStorageCapacity(),
         fileManager: FileManager = .default
     ) {
+        self.init(
+            booksDirectory: booksDirectory, storage: storage, fileManager: fileManager,
+            temporaryDirectory: FileManager.default.temporaryDirectory,
+            stagingRootProvider: Self.itemReplacementDirectory(for:))
+    }
+
+    /// Test seam: `temporaryDirectory` stands in for the system temporary directory and
+    /// `stagingRootProvider` for the item-replacement lookup (throw to force the fallback).
+    init(
+        booksDirectory: URL,
+        storage: StorageCapacity = VolumeStorageCapacity(),
+        fileManager: FileManager = .default,
+        temporaryDirectory: URL,
+        stagingRootProvider: @escaping @Sendable (URL) throws -> URL
+    ) {
         self.booksDirectory = booksDirectory
         self.storage = storage
         self.fileManager = fileManager
+        self.temporaryDirectory = temporaryDirectory
+        self.stagingRootProvider = stagingRootProvider
     }
 
-    var stagingRoot: URL { booksDirectory.appending(path: Self.stagingName) }
+    /// A fresh system temporary directory on the same volume as `booksDirectory`, so
+    /// moving out of it is a rename. The system purges whatever a killed run leaves there.
+    static func itemReplacementDirectory(for booksDirectory: URL) throws -> URL {
+        try FileManager.default.url(
+            for: .itemReplacementDirectory, in: .userDomainMask,
+            appropriateFor: booksDirectory, create: true)
+    }
 
-    /// Staging lives at `<booksDirectory>/.staging/<bookID>`; the final folder is `<booksDirectory>/<bookID>`.
+    var fallbackStagingRoot: URL {
+        temporaryDirectory.appending(path: Self.fallbackStagingName, directoryHint: .isDirectory)
+    }
+
+    /// Staging lives at `<staging root>/<bookID>`, where the staging root is a fresh
+    /// item-replacement directory for the Books directory's volume (or, if the system
+    /// cannot supply one, `<temporary directory>/FolioImport`). The final folder is
+    /// `<booksDirectory>/<bookID>`, reached by a single rename that never copies.
     /// `progress` receives (pagesDone, pagesTotal), first call with (0, total).
     /// On any throw, including `CancellationError`, the staging folder is gone and no final folder exists.
     public func run(
@@ -43,14 +80,18 @@ public struct ImportPipeline: Sendable {
         progress: @Sendable (Int, Int) async -> Void
     ) async throws -> Book {
         let folderName = bookID.rawValue.uuidString
+        try fileSystem {
+            try fileManager.createDirectory(at: booksDirectory, withIntermediateDirectories: true)
+        }
+        let (stagingRoot, ownsRoot) = try makeStagingRoot()
+        defer { if ownsRoot { try? fileManager.removeItem(at: stagingRoot) } }
         let staging = stagingRoot.appending(path: folderName, directoryHint: .isDirectory)
         do {
             let pages = try await stagePages(from: source, into: staging, progress: progress)
             try renderCover(
                 from: staging.appending(path: Self.pagesName), pages: pages, in: staging)
             try fileSystem {
-                try fileManager.moveItem(
-                    at: staging, to: booksDirectory.appending(path: folderName))
+                try rename(staging, to: booksDirectory.appending(path: folderName))
             }
             return Book(
                 id: bookID, title: title, folderName: folderName, pages: pages,
@@ -62,14 +103,15 @@ public struct ImportPipeline: Sendable {
         }
     }
 
-    /// Deletes every folder under `.staging`. An item that cannot be deleted does not
-    /// stop the rest; the first such error is thrown once all have been tried.
-    public func removeAllStaging() throws {
-        guard fileManager.fileExists(atPath: stagingRoot.path) else { return }
+    /// Deletes everything under `<temporary directory>/FolioImport`, then the folder
+    /// itself. Item-replacement directories are left for the system to purge. An item
+    /// that cannot be deleted does not stop the rest; the first such error is thrown
+    /// once all have been tried.
+    public func removeLeftoverStaging() throws {
+        let root = fallbackStagingRoot
+        guard fileManager.fileExists(atPath: root.path) else { return }
         var firstError: (any Error)?
-        for item in try fileManager.contentsOfDirectory(
-            at: stagingRoot, includingPropertiesForKeys: nil)
-        {
+        for item in try fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) {
             do {
                 try fileManager.removeItem(at: item)
             } catch {
@@ -77,6 +119,42 @@ public struct ImportPipeline: Sendable {
             }
         }
         if let firstError { throw firstError }
+        try fileManager.removeItem(at: root)
+    }
+
+    /// The staging root for one run, and whether the run owns (and so deletes) it.
+    private func makeStagingRoot() throws -> (URL, owned: Bool) {
+        do {
+            return (try stagingRootProvider(booksDirectory), true)
+        } catch {
+            LibraryLog.logger.warning(
+                "No item-replacement directory for the Books directory, staging under FolioImport: \(String(describing: error), privacy: .public)"
+            )
+        }
+        let root = fallbackStagingRoot
+        try fileSystem {
+            try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+        }
+        return (root, false)
+    }
+
+    /// Moves `source` to `destination` with `rename(2)`, failing if `destination` exists.
+    /// Unlike `FileManager.moveItem`, this never falls back to copying when the two are
+    /// on different volumes, so the Book folder appears whole or not at all.
+    private func rename(_ source: URL, to destination: URL) throws {
+        let result = source.withUnsafeFileSystemRepresentation { from in
+            destination.withUnsafeFileSystemRepresentation { to in
+                guard let from, let to else { return EINVAL }
+                return renamex_np(from, to, UInt32(RENAME_EXCL)) == 0 ? 0 : errno
+            }
+        }
+        guard result != 0 else { return }
+        if result == EXDEV {
+            LibraryLog.logger.error(
+                "Staging is on a different volume from the Books directory; the Import cannot be moved into place"
+            )
+        }
+        throw POSIXError(POSIXErrorCode(rawValue: result) ?? .EIO)
     }
 
     /// Checks storage, then fills `<staging>/pages` with the Source's Pages under their new names.

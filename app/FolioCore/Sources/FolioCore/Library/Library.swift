@@ -42,14 +42,14 @@ public actor Library {
         self.booksDirectory = pipeline.booksDirectory
     }
 
-    /// Deletes staging, removes Book records without folders and folders without records,
+    /// Deletes leftover staging, removes Book records without folders and folders without records,
     /// returns In Progress Imports to Queued (or Completed when their Book was already
     /// added), then starts the scheduler. Cleanup is best-effort: a step that fails is
     /// logged and skipped, so recovery and the scheduler always run. Throws only when
     /// the In Progress Imports cannot be read, after starting the scheduler anyway.
     public func start() async throws {
         defer { kick() }
-        removeStaging()
+        removeLeftoverStaging()
         await reconcileBookFolders()
         for var record in try await imports.imports(status: .inProgress) {
             do {
@@ -189,17 +189,18 @@ public actor Library {
 
     // MARK: - Launch reconciliation
 
-    private func removeStaging() {
+    /// Creates the Books directory if needed, then deletes staging a killed run left in
+    /// the system temporary directory.
+    private func removeLeftoverStaging() {
         do {
-            try fileManager.createDirectory(
-                at: pipeline.stagingRoot, withIntermediateDirectories: true)
+            try fileManager.createDirectory(at: booksDirectory, withIntermediateDirectories: true)
         } catch {
-            Self.logCleanupFailure("create staging", error: error)
+            Self.logCleanupFailure("create the Books directory", error: error)
         }
         do {
-            try pipeline.removeAllStaging()
+            try pipeline.removeLeftoverStaging()
         } catch {
-            Self.logCleanupFailure("remove staging", error: error)
+            Self.logCleanupFailure("remove leftover staging", error: error)
         }
     }
 

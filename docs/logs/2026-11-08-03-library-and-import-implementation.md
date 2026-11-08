@@ -144,3 +144,14 @@ reliable way to make `removeItem` fail in a test.
   `liveProgress` updates are untested.
 - `bookID` on an In Progress or Failed Import points at no Book; no code may
   treat it as "has a Book".
+
+## Staging moved to system temp
+
+Owner decision after the final review: Import staging no longer lives at
+`<Books>/.staging`. Each run stages in a fresh item-replacement directory for
+the Books directory's volume, deleted when the run ends and otherwise purged by
+the system; if none is available it falls back to `<tmp>/FolioImport`, which
+`Library.start()` clears through `removeLeftoverStaging()`. The final move is a
+`renamex_np(…, RENAME_EXCL)` so it can never degrade to copy-and-remove across
+volumes. This also closes the "empty `.staging` folder is left behind"
+follow-up. Books stay in Application Support.

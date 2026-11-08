@@ -63,6 +63,8 @@ struct LibraryTests {
     private struct Fixture {
         let directory: TemporaryDirectory
         let booksDirectory: URL
+        /// Stands in for the system temporary directory, which holds the fallback staging.
+        let temporaryDirectory: URL
         let books = InMemoryBookRepository()
         let imports: any ImportRepository
         let library: Library
@@ -75,11 +77,14 @@ struct LibraryTests {
             self.imports = imports
             directory = try TemporaryDirectory()
             booksDirectory = directory.url.appending(path: "Books", directoryHint: .isDirectory)
+            temporaryDirectory = directory.url.appending(path: "Temp", directoryHint: .isDirectory)
             library = Library(
                 books: books, imports: imports,
                 pipeline: ImportPipeline(
                     booksDirectory: booksDirectory,
-                    storage: FixedStorageCapacity(bytes: .max)),
+                    storage: FixedStorageCapacity(bytes: .max),
+                    temporaryDirectory: temporaryDirectory,
+                    stagingRootProvider: ImportPipeline.itemReplacementDirectory(for:)),
                 sourceAccess: sourceAccess, now: now)
         }
 
@@ -94,13 +99,24 @@ struct LibraryTests {
             return source
         }
 
-        /// Names under the Books directory, plus `.staging/<name>` for anything staged.
+        /// Names under the Books directory.
         func booksDirectoryContents() throws -> [String] {
-            let manager = FileManager.default
-            let staging = booksDirectory.appending(path: ".staging")
-            let top = try manager.contentsOfDirectory(atPath: booksDirectory.path)
-            let staged = (try? manager.contentsOfDirectory(atPath: staging.path)) ?? []
-            return (top.filter { $0 != ".staging" } + staged.map { ".staging/\($0)" }).sorted()
+            try FileManager.default.contentsOfDirectory(atPath: booksDirectory.path).sorted()
+        }
+
+        /// Names inside the fallback staging folder, empty when it does not exist.
+        func leftoverStaging() -> [String] {
+            let root = temporaryDirectory.appending(path: ImportPipeline.fallbackStagingName)
+            return ((try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? [])
+                .sorted()
+        }
+
+        /// Creates `<temporary directory>/FolioImport/<new id>/pages/0001.png` and returns
+        /// the `pages` folder.
+        func leftoverStagedRun() throws -> URL {
+            let relative =
+                "Temp/\(ImportPipeline.fallbackStagingName)/\(UUID().uuidString)/pages/0001.png"
+            return try directory.file(relative).deletingLastPathComponent()
         }
 
         /// Drains `library.events` until one satisfies `done`, failing after 5 s.
@@ -462,7 +478,7 @@ struct LibraryTests {
         interrupted.pagesDone = 1
         interrupted.pagesTotal = 2
         try await fixture.imports.add(interrupted)
-        try fixture.directory.file("Books/.staging/\(UUID().uuidString)/pages/0001.png")
+        _ = try fixture.leftoverStagedRun()
 
         try await fixture.library.start()
         let events = try await fixture.events(until: Self.isCompleted)
@@ -475,6 +491,7 @@ struct LibraryTests {
         #expect(id == interrupted.id)
         #expect(try await fixture.imports.importRecord(id: id)?.status == .completed)
         #expect(try fixture.booksDirectoryContents() == [book.folderName])
+        #expect(fixture.leftoverStaging().isEmpty)
     }
 
     @Test("start completes an In Progress Import whose Book was already added")
@@ -548,12 +565,14 @@ struct LibraryTests {
             status: .inProgress, createdAt: .now, bookmark: try access.bookmark(for: source))
         try await fixture.imports.add(interrupted)
         // Folders whose contents cannot be deleted: a staged run and an orphan Book folder.
-        let stagedFolder = ".staging/\(UUID().uuidString)"
+        let stagedPages = try fixture.leftoverStagedRun()
+        let stagedFolder = stagedPages.deletingLastPathComponent().lastPathComponent
         let orphanFolder = UUID().uuidString
-        let locked = try [stagedFolder, orphanFolder].map { folder in
-            try fixture.directory.file("Books/\(folder)/pages/0001.png")
-                .deletingLastPathComponent()
-        }
+        let locked = [
+            stagedPages,
+            try fixture.directory.file("Books/\(orphanFolder)/pages/0001.png")
+                .deletingLastPathComponent(),
+        ]
         for folder in locked {
             try FileManager.default.setAttributes(
                 [.posixPermissions: 0o555], ofItemAtPath: folder.path)
@@ -575,9 +594,8 @@ struct LibraryTests {
         }
         #expect(id == interrupted.id)
         #expect(try await fixture.imports.importRecord(id: id)?.status == .completed)
-        #expect(
-            try fixture.booksDirectoryContents()
-                == [stagedFolder, orphanFolder, book.folderName].sorted())
+        #expect(try fixture.booksDirectoryContents() == [orphanFolder, book.folderName].sorted())
+        #expect(fixture.leftoverStaging() == [stagedFolder])
     }
 
     @Test("items are ordered In Progress, Queued, Failed, then Books")

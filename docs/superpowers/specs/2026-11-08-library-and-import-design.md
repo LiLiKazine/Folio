@@ -267,8 +267,10 @@ SwiftData.
   Application Support (excluded from backup), runs one Import at a time,
   emits the domain events above as an `AsyncStream`, and keeps records and
   files in step: Pages land in a
-  staging folder and are moved into their final folder in one step on
-  completion, then the Book record is inserted and the Import record is
+  staging folder in the system temporary directory (an item-replacement
+  directory on the Books directory's volume, so the system purges what a
+  killed Import leaves and the final move is a single rename) and are moved
+  into their final folder in one step on completion, then the Book record is inserted and the Import record is
   marked Completed with the Book id. The Import record is written when the
   Import starts, so an Import survives the app being killed as a record with
   status In Progress. Deleting a Book removes record
@@ -276,7 +278,8 @@ SwiftData.
 - The SwiftData store file lives inside the Books directory, which is
   excluded from backup, so records and Page files are backed up (or not)
   together and a restore cannot yield records without files. On launch the
-  Library deletes leftover staging folders, returns any In Progress Import
+  Library deletes any leftover fallback staging folder (the item-replacement
+  directories are left to the system), returns any In Progress Import
   to Queued so it resumes automatically (being killed is not a fault of the
   Source), removes any Book record whose folder is missing, and removes any
   folder with no record. (Builder's call.)

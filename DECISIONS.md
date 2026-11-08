@@ -99,7 +99,19 @@ no Book, so code must never read a non-nil id as "has a Book".
 sits beside the Book folders in the backup-excluded directory under Application
 Support, so a restored device cannot have records without Pages or Pages
 without records. Launch reconciliation only considers folders whose name parses
-as a UUID, which leaves the store files and the `.staging` area alone.
+as a UUID, which leaves the store files alone.
+
+**Import staging lives in the system temporary directory.** Each Import stages
+its Pages in a fresh item-replacement directory that the system supplies for
+the Books directory's volume (`FileManager.url(for: .itemReplacementDirectory,
+appropriateFor:)`), so the system purges whatever a killed Import leaves and
+the final move into the Books directory stays a single atomic rename. If the
+system cannot supply one, staging falls back to a `FolioImport` folder in the
+temporary directory, which launch cleanup deletes; the final move uses
+`rename(2)` rather than `FileManager.moveItem`, so a cross-volume staging folder
+fails the Import with a storage failure instead of being copied. Books stay in
+Application Support because Documents is for files the user manages and is
+backed up by default.
 
 **Zip reader scope.** The reader handles stored and deflate entries, data
 descriptors, and UTF-8 names (with a CP437 fallback when the UTF-8 flag is

@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 
 @testable import FolioCore
@@ -7,25 +8,60 @@ import Testing
 struct ImportPipelineTests {
     private static let plentyOfStorage = FixedStorageCapacity(bytes: .max)
 
+    /// Records every staging root a pipeline obtains, so a test can check it is gone.
+    private final class StagingRoots: Sendable {
+        private let roots = Mutex<[URL]>([])
+
+        var all: [URL] { roots.withLock { $0 } }
+
+        /// The system item-replacement directory for `booksDirectory`, recorded.
+        func provide(for booksDirectory: URL) throws -> URL {
+            let root = try ImportPipeline.itemReplacementDirectory(for: booksDirectory)
+            roots.withLock { $0.append(root) }
+            return root
+        }
+    }
+
+    private struct NoItemReplacementDirectory: Error {}
+
     private struct Fixture {
         let directory: TemporaryDirectory
         let booksDirectory: URL
+        /// Stands in for the system temporary directory, which holds the fallback staging.
+        let temporaryDirectory: URL
+        let stagingRoots = StagingRoots()
         let pipeline: ImportPipeline
 
-        init(storage: StorageCapacity = ImportPipelineTests.plentyOfStorage) throws {
+        init(
+            storage: StorageCapacity = ImportPipelineTests.plentyOfStorage,
+            itemReplacementAvailable: Bool = true
+        ) throws {
             directory = try TemporaryDirectory()
             booksDirectory = directory.url.appending(path: "Books", directoryHint: .isDirectory)
-            pipeline = ImportPipeline(booksDirectory: booksDirectory, storage: storage)
+            temporaryDirectory = directory.url.appending(path: "Temp", directoryHint: .isDirectory)
+            pipeline = ImportPipeline(
+                booksDirectory: booksDirectory, storage: storage,
+                temporaryDirectory: temporaryDirectory,
+                stagingRootProvider: { [stagingRoots] booksDirectory in
+                    guard itemReplacementAvailable else { throw NoItemReplacementDirectory() }
+                    return try stagingRoots.provide(for: booksDirectory)
+                })
         }
 
-        var stagingDirectory: URL { booksDirectory.appending(path: ".staging") }
+        var fallbackStagingRoot: URL {
+            temporaryDirectory.appending(path: ImportPipeline.fallbackStagingName)
+        }
 
-        /// Everything under the Books directory other than `.staging`, plus everything inside `.staging`.
+        /// Everything under the Books directory, plus every staging root a run used that
+        /// still exists, plus everything inside the fallback staging folder.
         func leftovers() -> [String] {
             let manager = FileManager.default
             let books = (try? manager.contentsOfDirectory(atPath: booksDirectory.path)) ?? []
-            let staged = (try? manager.contentsOfDirectory(atPath: stagingDirectory.path)) ?? []
-            return books.filter { $0 != ".staging" } + staged.map { ".staging/\($0)" }
+            let roots = stagingRoots.all.filter { manager.fileExists(atPath: $0.path) }
+            let fallback =
+                (try? manager.contentsOfDirectory(atPath: fallbackStagingRoot.path)) ?? []
+            return books + roots.map { "staging root \($0.path)" }
+                + fallback.map { "\(ImportPipeline.fallbackStagingName)/\($0)" }
         }
 
         /// A folder Source holding real PNG images at the given relative paths.
@@ -171,7 +207,7 @@ struct ImportPipelineTests {
                 try await fixture.run(source)
             }
         }
-        #expect(!FileManager.default.fileExists(atPath: fixture.stagingDirectory.path))
+        #expect(fixture.stagingRoots.all.count == 2)
         #expect(fixture.leftovers().isEmpty)
     }
 
@@ -260,18 +296,78 @@ struct ImportPipelineTests {
         #expect(!ImportPipeline.isReadFailure(CocoaError(.fileWriteOutOfSpace)))
     }
 
-    @Test("removeAllStaging clears leftovers")
+    @Test("staging is on the same volume as the Books directory")
+    func stagingVolume() async throws {
+        let fixture = try Fixture()
+        defer { fixture.directory.remove() }
+        let source = try fixture.folderSource(["a.png"])
+        let volumes = Mutex<[String]>([])
+        let books = fixture.booksDirectory
+
+        _ = try await fixture.pipeline.run(source: source, bookID: BookID(), title: "Title") {
+            done, _ in
+            guard done == 1, let root = fixture.stagingRoots.all.first else { return }
+            for url in [root, books] {
+                let volume = try? url.resourceValues(forKeys: [.volumeIdentifierKey])
+                    .volumeIdentifier
+                volumes.withLock { $0.append(volume.map { "\($0)" } ?? "unknown") }
+            }
+        }
+
+        let identifiers = volumes.withLock { $0 }
+        #expect(identifiers.count == 2)
+        #expect(!identifiers.contains("unknown"))
+        #expect(Set(identifiers).count == 1)
+        #expect(fixture.stagingRoots.all.count == 1)
+        #expect(!fixture.stagingRoots.all[0].path.hasPrefix(fixture.booksDirectory.path))
+    }
+
+    @Test("without an item-replacement directory, staging falls back to FolioImport")
+    func fallbackStaging() async throws {
+        let fixture = try Fixture(itemReplacementAvailable: false)
+        defer { fixture.directory.remove() }
+        let source = try fixture.folderSource(["b.jpg", "a.png"])
+        let bookID = BookID()
+        let sawStaging = Mutex(false)
+        let staging = fixture.fallbackStagingRoot.appending(path: bookID.rawValue.uuidString)
+
+        let book = try await fixture.pipeline.run(source: source, bookID: bookID, title: "Title") {
+            _, _ in
+            if FileManager.default.fileExists(atPath: staging.path) {
+                sawStaging.withLock { $0 = true }
+            }
+        }
+
+        #expect(sawStaging.withLock { $0 })
+        try fixture.expectImported(book, bookID: bookID)
+    }
+
+    @Test("a failed run under the fallback leaves nothing in FolioImport")
+    func fallbackFailure() async throws {
+        let fixture = try Fixture(itemReplacementAvailable: false)
+        defer { fixture.directory.remove() }
+        let source = try fixture.directory.file("Source.zip", bytes: Data("not a zip".utf8))
+
+        await #expect(throws: ImportFailure(reason: .unreadableZip)) {
+            try await fixture.run(source)
+        }
+        #expect(fixture.leftovers().isEmpty)
+    }
+
+    @Test("removeLeftoverStaging clears the fallback staging folder")
     func staging() async throws {
         let fixture = try Fixture()
         defer { fixture.directory.remove() }
         let source = try fixture.folderSource(["a.png"])
         let bookID = BookID()
         _ = try await fixture.run(source, bookID: bookID)
-        try fixture.directory.file("Books/.staging/\(UUID().uuidString)/pages/0001.png")
-        try fixture.directory.file("Books/.staging/\(UUID().uuidString)/expanded/a.png")
+        let name = ImportPipeline.fallbackStagingName
+        try fixture.directory.file("Temp/\(name)/\(UUID().uuidString)/pages/0001.png")
+        try fixture.directory.file("Temp/\(name)/\(UUID().uuidString)/expanded/a.png")
 
-        try fixture.pipeline.removeAllStaging()
+        try fixture.pipeline.removeLeftoverStaging()
 
+        #expect(!FileManager.default.fileExists(atPath: fixture.fallbackStagingRoot.path))
         #expect(fixture.leftovers() == [bookID.rawValue.uuidString])
     }
 }
