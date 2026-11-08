@@ -281,8 +281,11 @@ import UniformTypeIdentifiers
 
         await model.importSource(try makeImageSource(named: "Held", pageCount: 1, in: fixture.root))
         await model.importSource(try makeImageSource(named: "Next", pageCount: 1, in: fixture.root))
+        // The In Progress write emits no event, so reload rather than wait for one; a
+        // reload still pending can only bring the same or newer state.
         try await waitUntil("the items show one Import In Progress and one Queued") {
-            model.items.compactMap { item -> ImportStatus? in
+            await model.reload()
+            return model.items.compactMap { item -> ImportStatus? in
                 if case .importRecord(let record) = item { record.status } else { nil }
             } == [.inProgress, .queued]
         }
@@ -740,5 +743,40 @@ import UniformTypeIdentifiers
         model.dismissNotice(dialog.id)
         #expect(model.presentedNotice == nil)
         #expect(model.notices.isEmpty)
+    }
+
+    @Test("a repeat is collapsed against the last Notice of its kind")
+    func collapseIsPerKind() async throws {
+        let bookRepository = FailingBookRepository()
+        let fixture = try makeFixture(books: bookRepository)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+        let task = try await startModel(model)
+        defer { task.cancel() }
+
+        await bookRepository.fail([.allBooks])
+        await model.reload()
+        await model.rename(BookID(), to: "")
+        await model.reload()
+
+        #expect(
+            copy(of: model.notices) == [
+                [
+                    "Couldn't Update the Library",
+                    "Folio couldn't save the change. What you see may be out of date; relaunch Folio to refresh.",
+                ],
+                ["Couldn't Rename", "A Book needs a Title."],
+            ])
+        #expect(model.notices.map(\.kind) == [.status, .dialog])
+    }
+
+    @Test("a dialog and a status Notice with the same copy do not say the same thing")
+    func dialogAndStatusWithSameCopyDoNotCollapse() {
+        let dialog = Notice(error: .storage(.openLibrary))
+        let status = Notice(storageFailed: .openLibrary)
+        #expect(copy(of: dialog) == copy(of: status))
+        #expect(!dialog.says(status))
+        #expect(!status.says(dialog))
+        #expect(dialog.says(Notice(error: .storage(.openLibrary))))
     }
 }

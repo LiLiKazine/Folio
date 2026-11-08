@@ -4,7 +4,7 @@ import Foundation
 /// A message the Library shows the user about an action that could not be
 /// completed: the title names what failed, the message what to do about it.
 struct Notice: Identifiable, Equatable, Sendable {
-    /// How the Notice is shown, following the HIG on alerts.
+    /// How the Notice is shown, following the Human Interface Guidelines.
     enum Kind: Sendable, Equatable {
         /// Answers an action the user just took, so it is shown as a dialog.
         case dialog
@@ -89,9 +89,9 @@ struct Notice: Identifiable, Equatable, Sendable {
             message: String(localized: "Folio couldn't open the file picker. Try again."))
     }
 
-    /// True when `other` says the same thing, whatever its identity.
+    /// True when `other` says the same thing in the same way, whatever its identity.
     func says(_ other: Notice) -> Bool {
-        title == other.title && message == other.message
+        kind == other.kind && title == other.title && message == other.message
     }
 
     private static func title(_ operation: LibraryOperation) -> String {

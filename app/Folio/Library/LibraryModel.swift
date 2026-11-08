@@ -166,10 +166,13 @@ import Observation
         }
     }
 
-    /// Appends `notice` unless it repeats the last one queued, so the same
-    /// failure reported twice in a row is shown once.
+    /// Appends `notice` unless it repeats the last one queued of its kind, so the
+    /// same failure reported twice in a row is shown once even if a Notice of the
+    /// other kind came between.
     private func queue(_ notice: Notice) {
-        if let last = notices.last, last.says(notice) { return }
+        if let last = notices.last(where: { $0.kind == notice.kind }), last.says(notice) {
+            return
+        }
         notices.append(notice)
     }
 
