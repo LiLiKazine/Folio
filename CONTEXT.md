@@ -81,8 +81,10 @@ _Avoid_: dismissed
 A Book's Title has changed.
 
 **BookOpened**:
-A Book was opened by the reader; the basis for Library order and, later,
-Reading Position.
+A Book was opened by the reader; the basis for Library order.
+
+**ReadingPositionChanged**:
+A Book's Reading Position moved to a Page because the reader turned to it.
 
 **BookRemoved**:
 A Book and all its Pages have left the Library.
