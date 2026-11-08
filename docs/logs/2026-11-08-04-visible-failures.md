@@ -79,8 +79,7 @@ Remaining `// Log-only:` catches (`grep -rn "Log-only:" app/`):
 - `Library.swift:269`, creating the Books directory at launch: an Import that needs the directory ends Failed with its own reason.
 - `Library.swift:275`, removing leftover staging: leftover staging is temporary storage that nothing in the Library lists.
 - `Library.swift:317`, deleting an orphan folder: a folder without a record is not listed, so it only takes up space.
-- `LibraryModel.swift:67`, reload after the launch step (`start()`) threw: the Open the Library Notice already covers this launch failure.
-- `LibraryModel.swift:79`, reload after a `LibraryStorageFailed` event: the storage Notice already covers it; a successful reload still refreshes the list.
+- `LibraryModel.reloadAfterNotice`, the reload after a failure that has already queued its Notice (the launch step `start()` throwing, a `LibraryStorageFailed` event, or a failed Import): that Notice already tells the user; a successful reload still refreshes the list.
 
 Calls whose failure is discarded without logging (`try?`, Swift's way of throwing an error away) carry `// Ignored:` with the reason instead (`grep -rn "Ignored:" app/`): the progress count save in `Library.swift`, staging removal in `ImportPipeline.swift`, closing a read-only zip in `ZipArchive.swift`, the folder check in `LibraryDropTarget.swift`, and the hand-over delay in `LibraryView.swift` and the DEBUG test hook in `LibraryModel.swift`.
 
@@ -95,7 +94,6 @@ Calls whose failure is discarded without logging (`try?`, Swift's way of throwin
 - The bounded 300 ms event drains in `LibraryTests` (waits of 300 ms that collect events during a test) add about 2.4 s and can miss an event that arrives late.
 - Operation names inside Notice titles are English raw values and are not translatable; two tests that check only part of a Notice's text; an unneeded `@MainActor` (the marker that keeps a type on the screen's thread) sits on `NoticeTests`.
 - The test hook for DEBUG builds (`FOLIO_DEBUG_NOTICES=2`) queues before the Library has loaded.
-- The `.importFailed` handler (the code that reacts to an ImportFailed event) reloads before queueing, so a failing reload there adds an extra Notice (same pattern as the fixed storage case).
 - The view does not retry a refused Notice dialog. It avoids the known refusal (another dialog on the Library screen is open) by waiting until that dialog closes, then hands over after 150 ms; a refusal for any other reason would leave Notices unshown until relaunch.
 - Retrying an Import skipped for an unsaved status is not possible in-session; it needs a design decision (show it as Failed in memory).
 

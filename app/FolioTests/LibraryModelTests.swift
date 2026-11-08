@@ -51,6 +51,28 @@ import UniformTypeIdentifiers
         }
     }
 
+    /// Holds every Import inside `withAccess` until `open()` is called.
+    private actor Gate {
+        private var isOpen = false
+        func open() { isOpen = true }
+        func wait() async throws {
+            while !isOpen { try await Task.sleep(for: .milliseconds(10)) }
+        }
+    }
+
+    private struct GatedSourceAccess: SourceAccess {
+        let gate: Gate
+
+        func bookmark(for url: URL) throws(SourceAccessError) -> Data { Data(url.path.utf8) }
+
+        func withAccess<T: Sendable>(
+            to bookmark: Data, _ body: @Sendable (URL) async throws -> T
+        ) async throws -> T {
+            try await gate.wait()
+            return try await body(URL(fileURLWithPath: String(decoding: bookmark, as: UTF8.self)))
+        }
+    }
+
     private func makeFixture(
         books: any BookRepository = InMemoryBookRepository(),
         imports: any ImportRepository = InMemoryImportRepository(),
@@ -187,6 +209,30 @@ import UniformTypeIdentifiers
         #expect(record.sourceName == "Notes")
         #expect(record.failureReason == .noImagesFound)
         #expect(model.liveProgress[record.id] == nil)
+    }
+
+    @Test("a failing Import with a failing reload yields only the Import's Notice")
+    func failureWithFailingReload() async throws {
+        let gate = Gate()
+        let bookRepository = FailingBookRepository()
+        let fixture = try makeFixture(
+            books: bookRepository, sourceAccess: GatedSourceAccess(gate: gate))
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+        let task = try await startModel(model)
+        defer { task.cancel() }
+
+        let source = fixture.root.appending(path: "Notes", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try Data("not a Page".utf8).write(to: source.appending(path: "readme.txt"))
+        await model.importSource(source)
+        try await waitUntil("the ImportQueued event is handled") { model.handledEventCount == 1 }
+        // From here every reload fails; the Import then fails with no images found.
+        await bookRepository.fail([.allBooks])
+        await gate.open()
+
+        try await waitUntil("the ImportFailed event is handled") { model.handledEventCount == 2 }
+        #expect(copy(of: model.notices) == [["Couldn't Import “Notes”", "No images found"]])
     }
 
     @Test("cancel yields no Notice and keeps the Failed item")

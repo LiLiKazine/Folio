@@ -38,7 +38,7 @@ import Observation
             AppLog.library.error(
                 "Could not start the Library: \(String(describing: error), privacy: .public)")
             queue(Notice(storageFailed: .openLibrary))
-            await reloadAfterFailedStart()
+            await reloadAfterNotice("it failed to start")
         }
         #if DEBUG
             queueDebugNotices()
@@ -61,27 +61,16 @@ import Observation
         }
     }
 
-    /// Loads what it can after `library.start()` threw, without a second Notice.
-    private func reloadAfterFailedStart() async {
+    /// Loads what it can after a failure that has already queued its Notice, without
+    /// a second one. `context` names that failure in the log.
+    private func reloadAfterNotice(_ context: String) async {
         do {
             items = try await library.items()
         } catch {
-            // Log-only: the Open the Library Notice already covers this launch failure.
-            AppLog.library.error(
-                "Could not load the Library after it failed to start: \(String(describing: error), privacy: .public)"
-            )
-        }
-    }
-
-    /// Loads what it can after a `LibraryStorageFailed` event, without a second Notice.
-    private func reloadAfterStorageFailure() async {
-        do {
-            items = try await library.items()
-        } catch {
-            // Log-only: the storage Notice already covers this failure; a successful
+            // Log-only: the Notice just queued already tells the user; a successful
             // reload still refreshes the list.
             AppLog.library.error(
-                "Could not load the Library after a storage failure: \(String(describing: error), privacy: .public)"
+                "Could not load the Library after \(context, privacy: .public): \(String(describing: error), privacy: .public)"
             )
         }
     }
@@ -215,16 +204,19 @@ import Observation
             await reload()
         case .importFailed(let id, let sourceName, let reason):
             liveProgress[id] = nil
-            await reload()
             // A cancellation the user asked for needs no Notice; the Failed card remains.
-            if reason != .cancelled {
+            if reason == .cancelled {
+                await reload()
+            } else {
+                // The Import's own Notice first, so a failing reload cannot precede it.
                 queue(Notice(importFailed: sourceName, reason: reason))
+                await reloadAfterNotice("an Import failed")
             }
         case .bookOpened:
             break
         case .libraryStorageFailed(let operation):
             queue(Notice(storageFailed: operation))
-            await reloadAfterStorageFailure()
+            await reloadAfterNotice("a storage failure")
         }
         handledEventCount += 1
     }
