@@ -112,11 +112,6 @@ Manual iOS checks need `SIMULATOR=<udid of a single-display iPhone>` (for
 example `SIMULATOR=<udid> ./scripts/run.sh ios`): taps do not land on the
 two-display "iPhone Duo" simulator the scripts pick by default.
 
-In DEBUG builds only, launching with `FOLIO_DEBUG_NOTICES=2` queues two test
-Notices so their presentation can be checked by hand; `FOLIO_DEBUG_NOTICES=picker`
-queues one Notice 2 s after launch, to check that a Notice queued while the file
-picker is open appears once the picker closes.
-
 `verify.sh` runs format → build → test → run (with a screenshot) for every
 enabled platform. Set `SKIP_LAUNCH=1` to skip only the launch step — format,
 build, and test still run for every platform. Used on headless CI, where

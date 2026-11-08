@@ -16,8 +16,6 @@ import Observation
     /// True once `start()` has loaded the items for the first time; until then
     /// `reload()` does nothing.
     private(set) var isLoaded = false
-    /// Events fully handled by `start()`; lets tests wait for an event that changes no state.
-    private(set) var handledEventCount = 0
 
     private let library: Library
     private let booksDirectory: URL
@@ -42,9 +40,6 @@ import Observation
             queue(Notice(storageFailed: .openLibrary))
             await reloadAfterNotice("it failed to start")
         }
-        #if DEBUG
-            queueDebugNotices()
-        #endif
         isLoaded = true
         for await event in library.events {
             await handle(event)
@@ -84,38 +79,20 @@ import Observation
         }
     }
 
-    #if DEBUG
-        /// Exists only for manual checks of Notice presentation. Launching with
-        /// `FOLIO_DEBUG_NOTICES=2` queues two Notices, to check the second is presented
-        /// after the first is dismissed. `FOLIO_DEBUG_NOTICES=picker` queues one Notice
-        /// 2 s after launch, to check a Notice queued while the file picker is open
-        /// appears once the picker closes.
-        private func queueDebugNotices() {
-            switch ProcessInfo.processInfo.environment["FOLIO_DEBUG_NOTICES"] {
-            case "2":
-                queue(Notice(storageFailed: .updateLibrary))
-                queue(Notice(storageFailed: .deleteBook))
-            case "picker":
-                Task {
-                    // Ignored: this Task is never cancelled; it only delays a test Notice.
-                    try? await Task.sleep(for: .seconds(2))
-                    queue(Notice(storageFailed: .updateLibrary))
-                }
-            default:
-                break
-            }
-        }
-    #endif
+    /// The dialog Notice the view shows now; later dialog Notices wait their turn.
+    var presentedNotice: Notice? { notices.first { $0.kind == .dialog } }
 
-    /// The Notice the view shows now; the rest wait their turn.
-    var presentedNotice: Notice? { notices.first }
+    /// The status Notice the view shows now; later status Notices wait their turn.
+    var statusNotice: Notice? { notices.first { $0.kind == .status } }
 
-    /// Removes the presented Notice if it is `id`, so the next one, if any, is
-    /// presented. A stale or repeated dismissal does nothing, so a waiting Notice
-    /// is never removed unseen.
+    /// Removes the Notice `id` if it is the one shown of its kind (`presentedNotice`
+    /// or `statusNotice`), so the next of that kind, if any, is shown. A stale or
+    /// repeated dismissal does nothing, so a waiting Notice is never removed unseen.
     func dismissNotice(_ id: Notice.ID) {
-        guard presentedNotice?.id == id else { return }
-        let notice = notices.removeFirst()
+        guard presentedNotice?.id == id || statusNotice?.id == id,
+            let index = notices.firstIndex(where: { $0.id == id })
+        else { return }
+        let notice = notices.remove(at: index)
         AppLog.library.info(
             "Dismissed Notice \(notice.title, privacy: .private); \(self.notices.count) waiting")
     }
@@ -221,6 +198,5 @@ import Observation
             queue(Notice(storageFailed: operation))
             await reloadAfterNotice("a storage failure")
         }
-        handledEventCount += 1
     }
 }

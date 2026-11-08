@@ -4,14 +4,31 @@ import Foundation
 /// A message the Library shows the user about an action that could not be
 /// completed: the title names what failed, the message what to do about it.
 struct Notice: Identifiable, Equatable, Sendable {
+    /// How the Notice is shown, following the HIG on alerts.
+    enum Kind: Sendable, Equatable {
+        /// Answers an action the user just took, so it is shown as a dialog.
+        case dialog
+        /// Reports a failure with no action of the user's behind it (a
+        /// `LibraryStorageFailed` event, a launch or reload failure), so it is
+        /// shown as a status line rather than interrupting the user.
+        case status
+    }
+
     let id: UUID
+    let kind: Kind
     let title: String
     let message: String
 
-    private init(title: String, message: String) {
+    private init(kind: Kind, title: String, message: String) {
         id = UUID()
+        self.kind = kind
         self.title = title
         self.message = message
+    }
+
+    /// A dialog Notice; every initializer but `init(storageFailed:)` makes one.
+    private init(title: String, message: String) {
+        self.init(kind: .dialog, title: title, message: message)
     }
 
     /// A Library operation the user started that threw.
@@ -40,7 +57,8 @@ struct Notice: Identifiable, Equatable, Sendable {
                 title: Self.title(operation),
                 message: String(localized: "That Import has already moved on."))
         case .storage(.openLibrary):
-            self.init(storageFailed: .openLibrary)
+            self.init(
+                title: Self.title(.openLibrary), message: Self.storageFailedMessage(.openLibrary))
         case .storage(let operation):
             self.init(
                 title: Self.title(operation),
@@ -54,17 +72,9 @@ struct Notice: Identifiable, Equatable, Sendable {
     /// A change the Library could not save or apply with no caller to tell
     /// (`LibraryStorageFailed`), or the Library failing to open at launch.
     init(storageFailed operation: LibraryOperation) {
-        let message =
-            operation == .openLibrary
-            ? String(
-                localized:
-                    "Folio couldn't open its Library. Relaunch Folio; if it keeps happening, free up storage."
-            )
-            : String(
-                localized:
-                    "Folio couldn't save the change. What you see may be out of date; relaunch Folio to refresh."
-            )
-        self.init(title: Self.title(operation), message: message)
+        self.init(
+            kind: .status, title: Self.title(operation),
+            message: Self.storageFailedMessage(operation))
     }
 
     /// An Import that was created and then Failed.
@@ -86,6 +96,18 @@ struct Notice: Identifiable, Equatable, Sendable {
 
     private static func title(_ operation: LibraryOperation) -> String {
         String(localized: "Couldn't \(operation.rawValue)")
+    }
+
+    private static func storageFailedMessage(_ operation: LibraryOperation) -> String {
+        operation == .openLibrary
+            ? String(
+                localized:
+                    "Folio couldn't open its Library. Relaunch Folio; if it keeps happening, free up storage."
+            )
+            : String(
+                localized:
+                    "Folio couldn't save the change. What you see may be out of date; relaunch Folio to refresh."
+            )
     }
 
     private static func importTitle(_ sourceName: String) -> String {

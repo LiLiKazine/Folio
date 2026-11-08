@@ -244,17 +244,31 @@ import UniformTypeIdentifiers
         let task = try await startModel(model)
         defer { task.cancel() }
 
-        let source = fixture.root.appending(path: "Notes", directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
-        try Data("not a Page".utf8).write(to: source.appending(path: "readme.txt"))
-        await model.importSource(source)
-        try await waitUntil("the ImportQueued event is handled") { model.handledEventCount == 1 }
-        // From here every reload fails; the Import then fails with no images found.
+        func makeEmptySource(named name: String) throws -> URL {
+            let source = fixture.root.appending(path: name, directoryHint: .isDirectory)
+            try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+            try Data("not a Page".utf8).write(to: source.appending(path: "readme.txt"))
+            return source
+        }
+        // Each ImportQueued reload is the only one that can show that many items.
+        await model.importSource(try makeEmptySource(named: "Notes"))
+        try await waitUntil("the Notes Import is an item") { model.items.count == 1 }
+        await model.importSource(try makeEmptySource(named: "Later"))
+        try await waitUntil("both Imports are items") { model.items.count == 2 }
+        // From here every reload fails; both Imports then fail with no images found,
+        // Notes first. The events are handled in order, so once the Later Notice is
+        // queued, the Notes ImportFailed event and its failing reload are done.
         await bookRepository.fail([.allBooks])
         await gate.open()
 
-        try await waitUntil("the ImportFailed event is handled") { model.handledEventCount == 2 }
-        #expect(copy(of: model.notices) == [["Couldn't Import “Notes”", "No images found"]])
+        try await waitUntil("the Later Import's Notice is queued") {
+            model.notices.last.map(copy(of:)) == ["Couldn't Import “Later”", "No images found"]
+        }
+        #expect(
+            copy(of: model.notices) == [
+                ["Couldn't Import “Notes”", "No images found"],
+                ["Couldn't Import “Later”", "No images found"],
+            ])
     }
 
     @Test("cancel yields no Notice and keeps the Failed item")
@@ -267,16 +281,11 @@ import UniformTypeIdentifiers
 
         await model.importSource(try makeImageSource(named: "Held", pageCount: 1, in: fixture.root))
         await model.importSource(try makeImageSource(named: "Next", pageCount: 1, in: fixture.root))
-        try await waitUntil("one Import is In Progress and one is Queued") {
-            let statuses = try await fixture.library.items().compactMap { item -> ImportStatus? in
+        try await waitUntil("the items show one Import In Progress and one Queued") {
+            model.items.compactMap { item -> ImportStatus? in
                 if case .importRecord(let record) = item { record.status } else { nil }
-            }
-            return statuses == [.inProgress, .queued]
+            } == [.inProgress, .queued]
         }
-        try await waitUntil("both ImportQueued events are handled") {
-            model.handledEventCount == 2
-        }
-        await model.reload()
         guard case .importRecord(let running) = model.items[0],
             case .importRecord(let queued) = model.items[1]
         else {
@@ -286,8 +295,15 @@ import UniformTypeIdentifiers
         defer { Task { await model.cancelImport(running.id) } }
 
         await model.cancelImport(queued.id)
-        try await waitUntil("the ImportFailed event is handled") {
-            model.handledEventCount == 3
+        // A Notice for the cancellation would be queued before this reload.
+        try await waitUntil("the items show the cancelled Import as Failed") {
+            model.items.contains {
+                if case .importRecord(let record) = $0 {
+                    record.id == queued.id && record.status == .failed
+                } else {
+                    false
+                }
+            }
         }
 
         #expect(model.notices.isEmpty)
@@ -323,7 +339,6 @@ import UniformTypeIdentifiers
         let before = model.items
         let olderBook = try #require(books(in: before).last)
 
-        let handledBeforeOpen = model.handledEventCount
         await model.open(olderBook.id)
 
         try await waitUntil("the Library records the open") {
@@ -335,9 +350,9 @@ import UniformTypeIdentifiers
                 }
             }
         }
-        try await waitUntil("the model has handled the BookOpened event") {
-            model.handledEventCount > handledBeforeOpen
-        }
+        // A bounded negative check: the BookOpened event changes no state, so nothing
+        // marks it handled. Give a reload it might wrongly start 300 ms to land.
+        try await Task.sleep(for: .milliseconds(300))
         #expect(model.items == before)
 
         await model.reload()
@@ -617,7 +632,7 @@ import UniformTypeIdentifiers
         // Two failures the user is told about: the Library could not open, and the
         // Import queue could not be read (LibraryStorageFailed). The reloads after
         // each also fail, but add no Notice of their own.
-        try await waitUntil("the queue failure is handled") { model.handledEventCount >= 1 }
+        try await waitUntil("the queue failure's Notice is queued") { model.notices.count >= 2 }
         #expect(
             copy(of: model.notices) == [
                 [
@@ -669,5 +684,61 @@ import UniformTypeIdentifiers
             copy(of: model.notices) == [
                 ["Couldn't Import", "Folio couldn't open the file picker. Try again."]
             ])
+    }
+
+    // MARK: - Notice kinds
+
+    @Test("a failure with no action of the user's behind it is a status Notice")
+    func storageFailedIsStatus() {
+        let operations: [LibraryOperation] = [.openLibrary, .updateLibrary, .import, .deleteBook]
+        for operation in operations {
+            #expect(Notice(storageFailed: operation).kind == .status)
+        }
+    }
+
+    @Test("a failure of an action the user took is a dialog Notice")
+    func actionFailuresAreDialog() {
+        let errors: [LibraryError] = [
+            .sourceUnavailable(sourceName: "Vol 1"), .sourceNotDownloaded(sourceName: "Vol 1"),
+            .emptyTitle, .notFound(.rename), .invalidStatus(.retryImport),
+            .storage(.deleteBook), .storage(.openLibrary),
+        ]
+        for error in errors {
+            #expect(Notice(error: error).kind == .dialog, "\(error)")
+        }
+        #expect(Notice(importFailed: "Vol 1", reason: .noImagesFound).kind == .dialog)
+        #expect(Notice.filePickerFailed().kind == .dialog)
+    }
+
+    @Test("the status Notice and the dialog Notice are presented separately")
+    func statusAndDialogPresentedSeparately() async throws {
+        let bookRepository = FailingBookRepository()
+        let fixture = try makeFixture(books: bookRepository)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+        let task = try await startModel(model)
+        defer { task.cancel() }
+
+        // The status Notice is queued first.
+        await bookRepository.fail([.allBooks])
+        await model.reload()
+        await model.rename(BookID(), to: "")
+
+        let status = try #require(model.statusNotice)
+        let dialog = try #require(model.presentedNotice)
+        #expect(status.kind == .status)
+        #expect(copy(of: status)[0] == "Couldn't Update the Library")
+        #expect(dialog.kind == .dialog)
+        #expect(copy(of: dialog) == ["Couldn't Rename", "A Book needs a Title."])
+
+        // Dismissing one leaves the other; a stale id does nothing.
+        model.dismissNotice(status.id)
+        #expect(model.statusNotice == nil)
+        #expect(model.presentedNotice == dialog)
+        model.dismissNotice(status.id)
+        #expect(model.presentedNotice == dialog)
+        model.dismissNotice(dialog.id)
+        #expect(model.presentedNotice == nil)
+        #expect(model.notices.isEmpty)
     }
 }
