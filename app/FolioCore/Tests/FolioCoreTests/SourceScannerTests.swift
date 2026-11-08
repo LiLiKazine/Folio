@@ -68,4 +68,28 @@ struct SourceScannerTests {
         #expect(SourceScanner.title(forSource: URL(fileURLWithPath: "/x/Vol.3")) == "Vol.3")
         #expect(SourceScanner.title(forSource: URL(fileURLWithPath: "/x/A.ZIP")) == "A")
     }
+
+    @Test("a directory or symbolic link with a Page extension is not a Page")
+    func onlyRegularFiles() throws {
+        let dir = try TemporaryDirectory()
+        defer { dir.remove() }
+        let target = try dir.file("a.png")
+        try FileManager.default.createDirectory(
+            at: dir.url.appending(path: "x.jpg"), withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            at: dir.url.appending(path: "y.png"), withDestinationURL: target)
+        #expect(try relativePaths(dir) == ["a.png"])
+    }
+
+    @Test("a Source inside a folder named __MACOSX still yields its Pages")
+    func macosxAboveSource() throws {
+        let dir = try TemporaryDirectory()
+        defer { dir.remove() }
+        try dir.file("__MACOSX/Source/01.png")
+        try dir.file("__MACOSX/Source/__MACOSX/._01.png")
+        try dir.file("__MACOSX/Source/__MACOSX/02.png")
+        let source = dir.url.appending(path: "__MACOSX/Source")
+        #expect(
+            try SourceScanner.pageFiles(in: source).map(\.lastPathComponent) == ["01.png"])
+    }
 }
