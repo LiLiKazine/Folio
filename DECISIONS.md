@@ -34,12 +34,14 @@ archive. Project-level `SWIFT_SUPPRESS_WARNINGS = NO` does not reach package
 targets. The trade-off, worth stating plainly: a warning in the package fails
 `./scripts/test.sh` and CI, but is suppressed when Xcode builds the app.
 
-**App Sandbox is on**, with `com.apple.security.network.client`.
+**App Sandbox is on**, with `files.user-selected.read-only` and
+`files.bookmarks.app-scope` and no network entitlement.
 Retrofitting the sandbox is architectural — a path `String` stops being a valid
 handle and persistence must move to security-scoped bookmarks — so it is cheaper
-to start inside the container and add entitlements as needed. Sandbox network
-denial presents as a generic connection failure rather than a permissions error,
-which is why the network client entitlement ships from the start.
+to start inside the container and add entitlements as needed. The bootstrap
+shipped `network.client`; it was removed in the Library and Import slice because
+Folio works without any network. If one is ever needed, note that sandbox network
+denial presents as a generic connection failure rather than a permissions error.
 
 **Signing.** macOS is signed ad-hoc (`CODE_SIGN_IDENTITY = -`) with no
 development team, so the project builds and runs with no Apple Developer account
