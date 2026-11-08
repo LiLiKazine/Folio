@@ -7,4 +7,7 @@ enum AppLog {
 
     /// Catch-all logger. Add a category per subsystem as the app grows.
     static let general = Logger(subsystem: subsystem, category: "general")
+
+    /// SwiftData store and the Books directory.
+    static let persistence = Logger(subsystem: subsystem, category: "persistence")
 }
