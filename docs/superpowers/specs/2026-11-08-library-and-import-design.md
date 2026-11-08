@@ -82,6 +82,8 @@ updated to use glossary terms when the reader slice is designed.
 5. Reading Position, when present, refers to a Page that exists in the Book.
 6. An Import is Completed only when its Book exists; a Completed Import
    always refers to a Book, and a Book is referred to by exactly one Import.
+   A Completed Import keeps its Book id as history even if the Book is later
+   removed.
 7. At most one Import is In Progress at a time. Whenever none is, the oldest
    Queued Import is promoted. This is what makes Imports serial.
 
@@ -175,6 +177,8 @@ one is in use.
   names. Zip64 and encrypted archives fail as "unsupported zip".
 - An iCloud Drive placeholder that is not downloaded is downloaded first when
   possible; otherwise the Import fails as "not downloaded".
+- Folder Sources in iCloud Drive: every file inside is downloaded first when
+  possible; otherwise the Import fails as "not downloaded".
 
 ## Behaviour
 
@@ -195,8 +199,8 @@ Mockups: https://claude.ai/artifact/UfuRMEqUSKo3HM7iJndNhz
 - Empty state: a placeholder glyph, "No Books yet", one sentence telling the
   user to import a folder of images or a zip of one, and an "Import a Book"
   button.
-- Import button in the navigation bar (plus icon). Disabled while an Import
-  runs. Opens the system file picker filtered to folders and zip files.
+- Import button in the navigation bar (plus icon). Always enabled; each
+  picked Source becomes a Queued Import. Opens the system file picker filtered to folders and zip files.
 - Imports that are not Completed appear as cards ahead of the Books: the
   In Progress one first, then Queued ones in creation order, then Failed
   ones. Each has a placeholder Cover and the Title it will get.
@@ -209,7 +213,8 @@ Mockups: https://claude.ai/artifact/UfuRMEqUSKo3HM7iJndNhz
 - Completed Imports are not shown; their Book is.
 - Import failure: a one-time alert titled "Couldn't Import "<Source name>""
   with a reason the user can act on, shown at the moment of failure. The
-  Failed card remains until retried or removed.
+  Failed card remains until retried or removed. The alert is not shown for a
+  cancellation the user requested; the Failed card still remains.
 - Book context menu (long-press on iPhone and iPad, right-click on Mac):
   Rename, Delete Book. Delete asks for confirmation.
 - Opening a Book records it as opened and, in this slice, does nothing else
