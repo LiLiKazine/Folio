@@ -353,14 +353,11 @@ struct LibraryView: View {
         queue.enqueue(presentation)
     }
 
-    /// Asks for the model's presented Notice unless it is already on screen or waiting.
+    /// Asks for the model's presented Notice; the queue ignores it if it is
+    /// already on screen or waiting.
     private func requestPresentedNotice() {
         guard let notice = model.presentedNotice else { return }
-        let presentation = Presentation.notice(notice)
-        let isQueued =
-            queue.current?.id == presentation.id
-            || queue.pending.contains { $0.id == presentation.id }
-        if !isQueued { request(presentation) }
+        request(.notice(notice))
     }
 
     /// True while the current dialog is of the kind `match` accepts. SwiftUI
