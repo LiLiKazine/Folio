@@ -135,7 +135,10 @@ import Observation
         case .importFailed(let id, let sourceName, let reason):
             liveProgress[id] = nil
             await reload()
-            failureAlert = FailureAlert(id: id, sourceName: sourceName, reason: reason)
+            // A cancellation the user asked for needs no alert; the Failed card remains.
+            if reason != .cancelled {
+                failureAlert = FailureAlert(id: id, sourceName: sourceName, reason: reason)
+            }
         case .bookOpened:
             break
         }

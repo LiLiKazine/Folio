@@ -18,7 +18,22 @@ import UniformTypeIdentifiers
         let model: LibraryModel
     }
 
-    private func makeFixture() throws -> Fixture {
+    /// Source access that holds every Import inside `withAccess` until its task is
+    /// cancelled, so the first Import stays In Progress and later ones stay Queued.
+    private struct HeldSourceAccess: SourceAccess {
+        func bookmark(for url: URL) throws(SourceAccessError) -> Data { Data(url.path.utf8) }
+
+        func withAccess<T: Sendable>(
+            to bookmark: Data, _ body: @Sendable (URL) async throws -> T
+        ) async throws -> T {
+            try await Task.sleep(for: .seconds(60))
+            return try await body(URL(fileURLWithPath: String(decoding: bookmark, as: UTF8.self)))
+        }
+    }
+
+    private func makeFixture(
+        sourceAccess: any SourceAccess = InMemorySourceAccess()
+    ) throws -> Fixture {
         let root = FileManager.default.temporaryDirectory
             .appending(path: "LibraryModelTests-\(UUID().uuidString)", directoryHint: .isDirectory)
         let booksDirectory = root.appending(path: "Books", directoryHint: .isDirectory)
@@ -27,7 +42,7 @@ import UniformTypeIdentifiers
         let library = Library(
             books: InMemoryBookRepository(), imports: InMemoryImportRepository(),
             pipeline: ImportPipeline(booksDirectory: booksDirectory),
-            sourceAccess: InMemorySourceAccess())
+            sourceAccess: sourceAccess)
         return Fixture(
             root: root, booksDirectory: booksDirectory, library: library,
             model: LibraryModel(library: library, booksDirectory: booksDirectory))
@@ -141,6 +156,52 @@ import UniformTypeIdentifiers
         guard case .importRecord(let record) = model.items[0] else { return }
         #expect(record.id == alert.id)
         #expect(model.liveProgress[alert.id] == nil)
+    }
+
+    @Test("cancelling a Queued Import keeps the Failed item without an alert")
+    func cancelNoAlert() async throws {
+        let fixture = try makeFixture(sourceAccess: HeldSourceAccess())
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+        let task = try await startModel(model)
+        defer { task.cancel() }
+
+        await model.importSource(try makeImageSource(named: "Held", pageCount: 1, in: fixture.root))
+        await model.importSource(try makeImageSource(named: "Next", pageCount: 1, in: fixture.root))
+        try await waitUntil("one Import is In Progress and one is Queued") {
+            let statuses = try await fixture.library.items().compactMap { item -> ImportStatus? in
+                if case .importRecord(let record) = item { record.status } else { nil }
+            }
+            return statuses == [.inProgress, .queued]
+        }
+        try await waitUntil("both ImportQueued events are handled") {
+            model.handledEventCount == 2
+        }
+        await model.reload()
+        guard case .importRecord(let running) = model.items[0],
+            case .importRecord(let queued) = model.items[1]
+        else {
+            Issue.record("expected two Import items, got \(model.items)")
+            return
+        }
+        defer { Task { await model.cancelImport(running.id) } }
+
+        await model.cancelImport(queued.id)
+        try await waitUntil("the ImportFailed event is handled") {
+            model.handledEventCount == 3
+        }
+
+        #expect(model.failureAlert == nil)
+        let failed = model.items.compactMap { item -> Import? in
+            if case .importRecord(let record) = item, record.status == .failed {
+                record
+            } else {
+                nil
+            }
+        }
+        #expect(failed.map(\.id) == [queued.id])
+        #expect(failed.first?.failureReason == .cancelled)
+        #expect(model.liveProgress[queued.id] == nil)
     }
 
     @Test("open does not reorder items until reload") func openNoReorder() async throws {
