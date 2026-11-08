@@ -32,6 +32,15 @@ struct SourceAccessTests {
                 > 0)
     }
 
+    @Test("volume capacity throws for a path that does not exist")
+    func capacityMissingPath() {
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString).appendingPathComponent("nope")
+        #expect(throws: (any Error).self) {
+            try VolumeStorageCapacity().availableBytes(at: missing)
+        }
+    }
+
     @Test("fixed capacity returns its configured bytes")
     func fixedCapacity() throws {
         #expect(

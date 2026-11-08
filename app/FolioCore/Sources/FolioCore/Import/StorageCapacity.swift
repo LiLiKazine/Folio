@@ -1,5 +1,9 @@
 import Foundation
 
+public enum StorageCapacityError: Error, Equatable {
+    case unavailable
+}
+
 /// Port reporting free space where the Library will write.
 public protocol StorageCapacity: Sendable {
     func availableBytes(at url: URL) throws -> Int64
@@ -10,7 +14,10 @@ public struct VolumeStorageCapacity: StorageCapacity {
 
     public func availableBytes(at url: URL) throws -> Int64 {
         let values = try url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-        return values.volumeAvailableCapacityForImportantUsage ?? 0
+        guard let bytes = values.volumeAvailableCapacityForImportantUsage else {
+            throw StorageCapacityError.unavailable
+        }
+        return bytes
     }
 }
 
