@@ -10,7 +10,7 @@ rename or delete that could not be saved looked like it had worked. The design
 user action either visibly succeed or show a Notice. This log covers building
 it in four tasks on `feature/visible-failures`: typed errors, failures with no
 caller, Notices in `LibraryModel`, and presenting them in the Library screen.
-The rulings, including the process ruling that Task 3 could make the minimal Library screen edit so the app kept compiling, are in `DECISIONS.md` ("Visible Failures"). Here the *store* is the database file holding Books and Imports, and the *Import scheduler* runs Queued Imports one after another.
+The rulings, including the process ruling that Task 3 could make the minimal Library screen edit so the app kept compiling, are in `DECISIONS.md` ("Visible Failures"). Terms used below: the *store* is the database file where Books and Imports are saved; the *Import scheduler* is the part of the Library that runs Queued Imports one after another; *launch recovery* is the step at launch that puts interrupted Imports back in the queue and tidies leftover records; the *launch step* is the Library's start-up call, `start()`, which runs launch recovery; a *catch* is the code that handles a failed step; *logging* is writing a line to the system's diagnostic log, which the user never sees; *SwiftUI* is Apple's screen-building framework; a *binding* is SwiftUI's two-way link between a value and what is on screen; a *skip set* is a list of Imports the scheduler has been told to leave alone; *in memory* means held only while the app runs, not saved.
 
 ## Options
 
@@ -22,7 +22,7 @@ The rulings, including the process ruling that Task 3 could make the minimal Lib
 
 ## Decision
 
-Every public Library operation throws only `LibraryError` (typed throws).
+Every public Library operation throws only `LibraryError` (typed throws, the compiler feature that lets a function declare exactly which error type it can raise).
 Background failures become `LibraryStorageFailed(operation)` events. The model
 turns both into Notices, queued and shown one at a time in a system dialog, and
 the codebase rule in `CLAUDE.md` requires a `// Log-only:` justification for
@@ -52,20 +52,19 @@ any catch that does not.
 - Typed throws enforce the contract: once `throws(LibraryError)` was on every
   public operation, any stray error type failed to compile, which is what found
   the remaining untyped paths.
-- The Import Import scheduler flood: when a disk-full store refused both the In Progress and
+- The Import scheduler flood: when a disk-full store refused both the In Progress and
   the Failed write, the scheduler re-picked the same Queued Import at once and
   emitted a storage event on every pass. Fixed with a per-session skip set.
-- Launch could produce two or three Notices for one broken store (the thrown
-  launch step `start()`, the Import scheduler's read, then a failing reload). The reload after a
-  thrown start or a storage event is now log-only.
+- Launch could produce two or three Notices for one broken store (the launch step `start()` throwing, the Import scheduler's read failing, then a failing reload of the Library list). The reload after a
+  throwing launch step or a storage event is now log-only.
 - SwiftUI dialog hand-over: an `isPresented` binding that never flips false then
   true will not show the second Notice, and a binding setter that removed
   a Notice could remove a waiting one unseen. The fix: only the OK button
   removes a Notice, the setter only hides, and the next dialog is set 150 ms
   after the previous one closed.
 - The task review found the file-picker error only logged; it is now a Notice.
-- iOS taps do not land on the two-display "iPhone Duo" simulator (idb lacks
-  SimulatorKit for this Xcode, `sim-use tap` reports success but nothing
+- iOS taps do not land on the two-display "iPhone Duo" simulator (idb, a simulator control tool, lacks
+  SimulatorKit, a simulator library, for this Xcode; `sim-use tap`, a simulator tap tool, reports success but nothing
   happens). Manual checks used a single-display iPhone 18 Pro via `SIMULATOR=`.
 - Checked by hand: on macOS and on the iPhone 18 Pro simulator, two Notices
   appear one after the other, each OK removes exactly one, and the screen ends
@@ -78,8 +77,8 @@ Remaining `// Log-only:` catches (`grep -rn "Log-only:" app/`):
 - `Library.swift:269`, creating the Books directory at launch: an Import that needs the directory ends Failed with its own reason.
 - `Library.swift:275`, removing leftover staging: leftover staging is temporary files that nothing in the Library lists.
 - `Library.swift:317`, deleting an orphan folder: a folder without a record is not listed, so it only takes up space.
-- `Library.swift:428`, saving Import progress: progress is shown from events, and launch recovery (the launch step that puts interrupted Imports back in the queue) resets the stored count.
-- `LibraryModel.swift:67`, reload after `start()` threw: the Open the Library Notice already covers this launch failure.
+- `Library.swift:428`, saving Import progress: progress is shown from events, and launch recovery resets the stored count.
+- `LibraryModel.swift:67`, reload after the launch step (`start()`) threw: the Open the Library Notice already covers this launch failure.
 - `LibraryModel.swift:79`, reload after a `LibraryStorageFailed` event: the storage Notice already covers it; a successful reload still refreshes the list.
 
 ## Manual verification still needed
@@ -89,16 +88,16 @@ Remaining `// Log-only:` catches (`grep -rn "Log-only:" app/`):
 
 ## Follow-ups
 
-- Untested paths: the launch step (`start()`) storage failure, cancel/retry/remove-Import storage failures, the `sourceNotDownloaded` mapping; the storage test fails both repositories at once, and several event tests drain only the first event while asserting equality.
-- The bounded 300 ms event drains in `LibraryTests` add about 2.4 s and can miss a stray late event.
-- Operation names inside Notice titles are English raw values and are not translatable; two partial-copy tests; `@MainActor` on `NoticeTests` is unnecessary.
-- A Notice queued while a Rename or Delete confirmation is closing may not present (two dialogs on one view); the DEBUG hook queues before the Library has loaded.
-- The `.importFailed` handler reloads before queueing, so a failing reload there adds an extra Notice (same pattern as the fixed storage case).
+- Untested paths: the launch step (`start()`) failing to read Imports, cancel/retry/remove-Import storage failures, the `sourceNotDownloaded` mapping; the storage test fails both the Book and Import stores at once, and several event tests drain only the first event while asserting equality.
+- The bounded 300 ms event drains in `LibraryTests` (waits of 300 ms that collect events during a test) add about 2.4 s and can miss a stray late event.
+- Operation names inside Notice titles are English raw values and are not translatable; two tests that check only part of a Notice's wording; an unneeded main-thread annotation (`@MainActor`) sits on `NoticeTests`.
+- A Notice queued while a Rename or Delete confirmation is closing may not present (two dialogs on one view); the DEBUG-only test hook (`FOLIO_DEBUG_NOTICES`) queues before the Library has loaded.
+- The `.importFailed` handler (the code that reacts to an ImportFailed event) reloads before queueing, so a failing reload there adds an extra Notice (same pattern as the fixed storage case).
 - If SwiftUI refuses to present while another dialog is closing, the view retries every 150 ms; this is unverified.
-- Retrying an Import skipped for an unsaved status is not possible in-session; it needs a design decision (show it as Failed in memory).
+- Retrying an Import skipped for an unsaved status is not possible in-session; it needs a design decision (show it as Failed in memory, meaning only while the app runs and not saved).
 
 ## Gate
 
-- FolioCore: `swift test -Xswiftc -warnings-as-errors`, 81 tests in 8 suites passed.
+- FolioCore: `swift test` with every compiler warning treated as a failure (`-Xswiftc -warnings-as-errors`), 81 tests in 8 suites passed.
 - App tests (`build/last-test.log`, macOS run): 43 tests in 6 suites passed.
 - `./scripts/verify.sh` (format, build, test, launch on iOS and macOS): green.
