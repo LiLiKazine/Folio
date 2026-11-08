@@ -122,12 +122,14 @@ struct LibraryView: View {
                 isPresented: noticeIsPresented,
                 presenting: shownNotice
             ) { notice in
-                // The cancel role makes Escape dismiss through this button too.
-                Button("OK", role: .cancel) { dismiss(notice) }
+                // The only place a Notice leaves the model. The cancel role makes
+                // Escape go through this button too.
+                Button("OK", role: .cancel) { model.dismissNotice(notice.id) }
             } message: { notice in
                 Text(notice.message)
             }
             .onChange(of: model.presentedNotice?.id, initial: true) { showPresentedNotice() }
+            .onChange(of: shownNotice) { showPresentedNotice() }
             .onAppear {
                 Task { await model.reload() }
             }
@@ -316,6 +318,7 @@ struct LibraryView: View {
         case .failure(let error):
             AppLog.library.error(
                 "File picker failed: \(String(describing: error), privacy: .public)")
+            model.filePickerFailed()
         }
     }
 
@@ -328,33 +331,34 @@ struct LibraryView: View {
         }
     }
 
-    /// Shows the model's presented Notice. The alert is driven by `shownNotice`
-    /// rather than by the model directly so that between two queued Notices it is
-    /// cleared and set again after a yield: the alert's `isPresented` goes false
-    /// then true, which SwiftUI needs to present the second one. Bound straight
-    /// to the model, it would stay true across the hand-over and the second
-    /// Notice could fail to appear.
+    /// Shows the model's presented Notice once no alert is showing one.
+    ///
+    /// The alert is driven by `shownNotice`, not by the model, and the hand-over
+    /// waits for the alert to close: `shownNotice` becomes nil only when SwiftUI
+    /// writes `isPresented = false`, and the next Notice is set only after that,
+    /// plus `noticeHandOverDelay` so the closing alert has finished animating out
+    /// and `isPresented` is seen going false then true.
+    ///
+    /// This cannot lose a Notice: only the OK button removes one from the model,
+    /// and only the Notice that button was shown with (`dismissNotice(_:)` checks
+    /// the id). A late `isPresented = false` that clears the next Notice only
+    /// hides it; it is still first in the model and is shown again from here.
     private func showPresentedNotice() {
-        shownNotice = nil
-        guard let next = model.presentedNotice else { return }
+        guard shownNotice == nil, let next = model.presentedNotice else { return }
         Task {
-            await Task.yield()
-            if model.presentedNotice?.id == next.id { shownNotice = next }
+            try? await Task.sleep(for: Self.noticeHandOverDelay)
+            guard shownNotice == nil, model.presentedNotice?.id == next.id else { return }
+            shownNotice = next
         }
     }
 
-    /// Removes `notice` from the model. The OK button and the alert's binding
-    /// both land here; the id check makes the second call do nothing, so a
-    /// waiting Notice is never removed unseen.
-    private func dismiss(_ notice: Notice) {
-        if model.presentedNotice?.id == notice.id { model.dismissNotice() }
-        if shownNotice?.id == notice.id { shownNotice = nil }
-    }
+    private static let noticeHandOverDelay = Duration.milliseconds(150)
 
+    /// Setting false only hides the alert; the model keeps the Notice until OK.
     private var noticeIsPresented: Binding<Bool> {
         Binding(
             get: { shownNotice != nil },
-            set: { if !$0, let shownNotice { dismiss(shownNotice) } }
+            set: { if !$0 { shownNotice = nil } }
         )
     }
 

@@ -72,6 +72,13 @@ struct Notice: Identifiable, Equatable, Sendable {
         self.init(title: Self.importTitle(sourceName), message: reason.localizedDescription)
     }
 
+    /// The system file picker failed before the user could pick a Source.
+    static func filePickerFailed() -> Notice {
+        Notice(
+            title: title(.import),
+            message: String(localized: "Folio couldn't open the file picker. Try again."))
+    }
+
     /// True when `other` says the same thing, whatever its identity.
     func says(_ other: Notice) -> Bool {
         title == other.title && message == other.message

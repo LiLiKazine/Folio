@@ -71,6 +71,19 @@ import Observation
         }
     }
 
+    /// Loads what it can after a `LibraryStorageFailed` event, without a second Notice.
+    private func reloadAfterStorageFailure() async {
+        do {
+            items = try await library.items()
+        } catch {
+            // Log-only: the storage Notice already covers this failure; a successful
+            // reload still refreshes the list.
+            AppLog.library.error(
+                "Could not load the Library after a storage failure: \(String(describing: error), privacy: .public)"
+            )
+        }
+    }
+
     #if DEBUG
         /// Exists only for the manual check that a second Notice is presented after
         /// the first is dismissed: launching with `FOLIO_DEBUG_NOTICES=2` queues two.
@@ -84,12 +97,19 @@ import Observation
     /// The Notice the view shows now; the rest wait their turn.
     var presentedNotice: Notice? { notices.first }
 
-    /// Removes the presented Notice, presenting the next one if any.
-    func dismissNotice() {
-        guard !notices.isEmpty else { return }
+    /// Removes the presented Notice if it is `id`, so the next one, if any, is
+    /// presented. A stale or repeated dismissal does nothing, so a waiting Notice
+    /// is never removed unseen.
+    func dismissNotice(_ id: Notice.ID) {
+        guard presentedNotice?.id == id else { return }
         let notice = notices.removeFirst()
         AppLog.library.info(
-            "Dismissed Notice \(notice.title, privacy: .public); \(self.notices.count) waiting")
+            "Dismissed Notice \(notice.title, privacy: .private); \(self.notices.count) waiting")
+    }
+
+    /// Queues the Notice for a file picker that failed before the user picked a Source.
+    func filePickerFailed() {
+        queue(.filePickerFailed())
     }
 
     func importSource(_ url: URL) async {
@@ -189,7 +209,7 @@ import Observation
             break
         case .libraryStorageFailed(let operation):
             queue(Notice(storageFailed: operation))
-            await reload()
+            await reloadAfterStorageFailure()
         }
         handledEventCount += 1
     }

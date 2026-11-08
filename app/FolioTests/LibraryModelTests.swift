@@ -339,9 +339,13 @@ import UniformTypeIdentifiers
         let second = ["Couldn't Rename", "It's no longer in the Library."]
         #expect(copy(of: model.notices) == [first, second])
         #expect(model.presentedNotice.map(copy(of:)) == first)
-        model.dismissNotice()
+        let firstID = try #require(model.presentedNotice).id
+        model.dismissNotice(firstID)
         #expect(model.presentedNotice.map(copy(of:)) == second)
-        model.dismissNotice()
+        // Dismissing the first again is stale and leaves the second waiting.
+        model.dismissNotice(firstID)
+        #expect(model.presentedNotice.map(copy(of:)) == second)
+        model.dismissNotice(try #require(model.presentedNotice).id)
         #expect(model.presentedNotice == nil)
     }
 
@@ -444,6 +448,46 @@ import UniformTypeIdentifiers
                     "Couldn't Open the Library",
                     "Folio couldn't open its Library. Relaunch Folio; if it keeps happening, free up storage.",
                 ]
+            ])
+    }
+
+    @Test("a broken store at launch yields Open the Library and Update the Library, once each")
+    func brokenStoreAtLaunch() async throws {
+        let imports = FailingImportRepository()
+        await imports.fail([.imports])
+        let fixture = try makeFixture(imports: imports)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+        let task = try await startModel(model)
+        defer { task.cancel() }
+
+        // Two failures the user is told about: the Library could not open, and the
+        // Import queue could not be read (LibraryStorageFailed). The reloads after
+        // each also fail, but add no Notice of their own.
+        try await waitUntil("the queue failure is handled") { model.handledEventCount >= 1 }
+        #expect(
+            copy(of: model.notices) == [
+                [
+                    "Couldn't Open the Library",
+                    "Folio couldn't open its Library. Relaunch Folio; if it keeps happening, free up storage.",
+                ],
+                [
+                    "Couldn't Update the Library",
+                    "Folio couldn't save the change. What you see may be out of date; relaunch Folio to refresh.",
+                ],
+            ])
+    }
+
+    @Test("a file picker failure queues exactly its Notice") func filePickerFailed() async throws {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+
+        model.filePickerFailed()
+
+        #expect(
+            copy(of: model.notices) == [
+                ["Couldn't Import", "Folio couldn't open the file picker. Try again."]
             ])
     }
 }

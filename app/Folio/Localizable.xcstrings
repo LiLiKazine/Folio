@@ -69,6 +69,7 @@
     "Done" : {},
     "Folio couldn't open its Library." : {},
     "Folio couldn't open its Library. Relaunch Folio; if it keeps happening, free up storage." : {},
+    "Folio couldn't open the file picker. Try again." : {},
     "Folio couldn't open the folder or zip. Pick it again from the file picker." : {},
     "Folio couldn't save the change. Try again; if it keeps happening, relaunch Folio." : {},
     "Folio couldn't save the change. What you see may be out of date; relaunch Folio to refresh." : {},

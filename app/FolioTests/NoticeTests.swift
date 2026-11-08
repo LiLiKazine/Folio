@@ -20,6 +20,12 @@ import Testing
         #expect(notice.message == "Not downloaded to this device")
     }
 
+    @Test("file picker failure") func filePickerFailed() {
+        let notice = Notice.filePickerFailed()
+        #expect(notice.title == "Couldn't Import")
+        #expect(notice.message == "Folio couldn't open the file picker. Try again.")
+    }
+
     @Test("emptyTitle") func emptyTitle() {
         let notice = Notice(error: .emptyTitle)
         #expect(notice.title == "Couldn't Rename")
