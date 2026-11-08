@@ -368,3 +368,77 @@ test counter of handled events existed only to observe the old timing. None
 of them is needed once one queue decides what is shown. This supersedes the
 "Import asked for while a Notice is showing" paragraph under Visible Failures:
 the picker now opens when the Notice closes, with no 150 ms pause.
+
+## 2026-11-08: Reading
+
+Opening a Book now shows its Pages one per screen. Terms used here: the *open
+Book* is that screen; *chrome* is the Title, page counter, slider and Close
+control that a tap shows or hides over the Page; a *push* is a screen added on
+top of the Library inside the same window, so the Library stays underneath; a
+*full-screen cover* is a screen SwiftUI (Apple's screen-building framework)
+puts in a separate layer above the whole window; *log-only* means a failure is
+written to the system log and the user sees nothing.
+
+**Two failures while reading are log-only, by the owner's ruling.** Saving the
+Reading Position when a Page is turned, and recording that a Book was opened.
+The Page turn and the opening itself visibly worked, and a Notice would
+interrupt reading for something the user cannot act on. The consequence the
+owner accepted: if saves keep failing, the user finds out only at the next open
+by landing on an older Page. Opening a Book the Library no longer has is the
+one open failure that is shown: the Book cannot open and its Notice says so.
+These are the only two places a failure is logged without a Notice, and each
+carries a comment naming this ruling.
+
+**Folio never reopens the Book that was open when it was last closed by the
+system.** A fresh launch always lands in the Library; the Book shows its
+Reading Position and sits first. If the app was not killed, backgrounding and
+returning shows the same Page. Because the Reading Position is saved on every
+Page turn and not on close, a kill loses nothing. Less state to keep right,
+and the owner prefers the Library.
+
+**Notices are presented at the root of the window, so the open Book is a push,
+not a full-screen cover.** Every dialog and the status line now live in
+`LibraryWindow`, the view that owns the window's navigation stack. Every screen
+the stack shows, now and later, is beneath them, so a Notice appears over
+whichever screen is on top. What the user experiences: an Import that fails
+while they read shows its Notice over the Page instead of waiting until they
+close the Book. SwiftUI puts a full-screen cover in a layer above the window's
+root, where a root-level Notice could not appear, so the Book is pushed on
+every platform. On iPhone the system back swipe from the left edge is off while
+reading, because the left edge turns a Page; Close is the way out.
+
+**The open Book belongs to its window on Mac.** Opening a Book in one window
+changes nothing in another. A never-read Book gets its Reading Position set to
+the first Page as soon as it opens, so looking at Page 1 and closing leaves
+"Page 1 of N" on its card. "Open" on Mac is double-click or Return.
+
+**Zoom is 2.5 times, from pinch or double tap, about the centre of the Page.**
+A second double tap returns to fit. A pinch goes up to 5 times. Pages are
+decoded at the window's size, as the design says, so a zoomed Page is
+enlarged rather than redrawn and looks soft; raising the decode size by the
+zoom scale would sharpen it at the cost of memory.
+
+**Pages are paged by a horizontal scroll view; no UIKit or AppKit was needed.**
+One SwiftUI mechanism (`ScrollView` with paging) turns Pages on iPhone, iPad and
+Mac, and a zoomed Page pans inside its own scroll view and hands the swipe to
+paging at its edge; both were checked on the iPhone simulator. Mac and iPad
+were not checked by the builder. Hiding the back button turns off the iPhone
+edge back swipe, so nothing was wrapped for that either.
+
+**Where the controls sit.** Title and Close are in the toolbar the platform
+draws (the navigation bar on iPhone and iPad, the window toolbar on Mac). The
+counter and slider are one bar at the bottom of the Page on every platform,
+because Mac has no bottom toolbar. On iPhone and iPad the whole chrome hides
+until a tap; on Mac the toolbar stays and only the bottom bar hides.
+
+**A Page file is at `<Book folder>/pages/<file name>`.** The design and plan
+said `<Book folder>/<file name>`; every Page showed the "could not be shown"
+placeholder until the real layout was used. The folder name now comes from the
+import code (`ImportPipeline.pagesName`) so the reading code cannot drift from
+it.
+
+**A test hook for Notices was not added.** The plan proposed a debug-only
+switch that queues test Notices. The Presentation Coordinator entry above
+records that kind of hook as a removed workaround, so the Notice-over-the-open-
+Book check used a real failing Import queued behind a long one.
+

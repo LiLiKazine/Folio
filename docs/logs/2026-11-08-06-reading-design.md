@@ -1,6 +1,6 @@
 # 2026-11-08-06: Reading a Book — design rulings
 
-**Status:** Decided; not yet implemented
+**Status:** Implemented
 
 ## Context
 
@@ -53,6 +53,12 @@ Page at once (it follows from the glossary definition); "Open" on Mac is
 double-click or Return, with no File menu item in this slice.
 
 ## What Changed
+
+- Implemented in six commits (table below): `Library.turnPage` and the
+  ReadingPositionChanged event in FolioCore; `LibraryModel` open-regardless,
+  log-only `turnPage`, `pageURL`, `removeBooks`; `LibraryWindow` owning the
+  navigation path and every dialog; Page decoding and cache; the reading
+  screen; the rulings in `DECISIONS.md` and `CLAUDE.md`.
 
 - `CONTEXT.md`: BookOpened trimmed; ReadingPositionChanged added.
 - `docs/superpowers/specs/2026-11-08-reading-design.md`: new.
@@ -114,6 +120,8 @@ double-click or Return, with no File menu item in this slice.
   screen without such a hook, and the Mac. The model-level check is the
   existing "a failing Import queues its Notice" test; the model has no notion
   of reading, so nothing in it can hold a Notice back.
+- Gate: `./scripts/verify.sh` green on macOS and iOS (format, build, test,
+  launch with screenshots).
 
 ## Commits
 
@@ -122,8 +130,9 @@ double-click or Return, with no File menu item in this slice.
 | f8685c1 | docs(design): reading a Book |
 | c2a94d9 | docs(plan): implementation plan for reading a Book |
 | d413de0 | feat(library): turnPage moves a Book's Reading Position |
-| (task 2) | feat(library): open regardless; turnPage and open record are log-only |
-| (task 3) | refactor(library): LibraryWindow owns the navigation path and every dialog |
-| (task 4) | feat(reading): decode Pages downsampled, cache the current Page and its neighbours |
-| (task 5) | feat(reading): open a Book and turn its Pages |
-| (task 6) | docs(reading): record the Notice-over-the-open-Book check |
+| d8c29bf | feat(library): open regardless; turnPage and open record are log-only |
+| a5d427a | refactor(library): LibraryWindow owns the navigation path and every dialog |
+| 5065b02 | feat(reading): decode Pages downsampled, cache the current Page and its neighbours |
+| 1d0ad87 | feat(reading): open a Book and turn its Pages |
+| 6e298f8 | docs(reading): record the Notice-over-the-open-Book check |
+| (task 7) | docs(reading): record the reading rulings |

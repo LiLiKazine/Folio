@@ -1,4 +1,5 @@
 import Testing
+
 @testable import Folio
 
 /// Proves the test target is wired, runs under Swift 6 strict concurrency, and

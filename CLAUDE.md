@@ -82,7 +82,12 @@ models and repositories, `LibraryStorage` (the backup-excluded Books directory
 that also contains the store), and `FileSourceAccess` (security-scoped
 bookmarks). `Library/` holds `LibraryModel` (the only consumer of the Library's
 events) and the SwiftUI views, the Mac commands and drop target, and the iPad
-selection bar.
+selection bar. `LibraryWindow` is the root of each window: it owns the
+navigation stack's path and every dialog and status line, so a Notice shows
+over whichever screen is on top. `Reading/` holds the open Book: `ReadingView`
+(paging and the Reading Position), `PageView` (zoom and the placeholder),
+`ReadingChrome` (counter and slider), and `PageImage` / `PageImageCache`
+(downsampled decoding, the current Page and one each side).
 
 ## Commands
 
