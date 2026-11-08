@@ -9,7 +9,7 @@ public enum ImportStatus: String, Codable, Sendable { case queued, inProgress, f
 
 public enum ImportFailureReason: String, Codable, Sendable, Equatable {
     case noImagesFound, unreadableZip, unsupportedZip, sourceNotDownloaded,
-        notEnoughStorage, sourceUnavailable, cancelled
+        notEnoughStorage, sourceUnavailable, cancelled, storageFailure, undecodablePage
 }
 
 public struct Import: Hashable, Codable, Sendable, Identifiable {
