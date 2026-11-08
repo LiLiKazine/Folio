@@ -1,0 +1,93 @@
+import FolioCore
+import Foundation
+import Testing
+
+@testable import Folio
+
+@Suite("Presentation queue")
+struct PresentationQueueTests {
+    private func makeBook(title: String = "Book") -> Book {
+        Book(
+            id: BookID(), title: title, folderName: "folder", pages: [],
+            coverFileName: "cover.jpg", importedAt: Date(timeIntervalSince1970: 0),
+            lastOpenedAt: nil, readingPosition: nil)
+    }
+
+    @Test("enqueue while idle presents at once")
+    func enqueueWhenIdlePresents() {
+        var queue = PresentationQueue()
+        queue.enqueue(.importPicker)
+        #expect(queue.current == .importPicker)
+        #expect(queue.pending.isEmpty)
+    }
+
+    @Test("enqueue while busy queues in order")
+    func enqueueWhenBusyQueuesInOrder() {
+        var queue = PresentationQueue()
+        let book = makeBook()
+        queue.enqueue(.importPicker)
+        queue.enqueue(.rename(book))
+        queue.enqueue(.deleteBook(book))
+        #expect(queue.current == .importPicker)
+        #expect(queue.pending == [.rename(book), .deleteBook(book)])
+    }
+
+    @Test("dismissed promotes the next pending presentation")
+    func dismissedPromotesNext() {
+        var queue = PresentationQueue()
+        let book = makeBook()
+        queue.enqueue(.importPicker)
+        queue.enqueue(.rename(book))
+        queue.dismissed(Presentation.importPicker.id)
+        #expect(queue.current == .rename(book))
+        #expect(queue.pending.isEmpty)
+    }
+
+    @Test("a stale id is ignored")
+    func staleDismissedIgnored() {
+        var queue = PresentationQueue()
+        let book = makeBook()
+        queue.enqueue(.importPicker)
+        queue.enqueue(.rename(book))
+        queue.dismissed(Presentation.rename(book).id)
+        #expect(queue.current == .importPicker)
+        #expect(queue.pending == [.rename(book)])
+    }
+
+    @Test("a mixed sequence is presented in order")
+    func mixedSequenceInOrder() {
+        var queue = PresentationQueue()
+        let first = Notice.filePickerFailed()
+        let second = Notice.filePickerFailed()
+        let book = makeBook()
+        let sequence: [Presentation] = [
+            .notice(first), .importPicker, .rename(book), .notice(second),
+        ]
+        sequence.forEach { queue.enqueue($0) }
+
+        var shown: [Presentation] = []
+        while let current = queue.current {
+            shown.append(current)
+            queue.dismissed(current.id)
+        }
+        #expect(shown == sequence)
+        #expect(queue.pending.isEmpty)
+    }
+
+    @Test("dismissed with nothing pending leaves the queue idle")
+    func dismissedWithEmptyPendingLeavesIdle() {
+        var queue = PresentationQueue()
+        queue.enqueue(.importPicker)
+        queue.dismissed(Presentation.importPicker.id)
+        #expect(queue.current == nil)
+        #expect(queue.pending.isEmpty)
+    }
+
+    @Test("a multi-delete id does not depend on selection order")
+    func deleteSelectionIDIsOrderIndependent() {
+        let ids = [BookID(), BookID(), BookID()]
+        #expect(
+            Presentation.deleteSelection(Set(ids)).id
+                == Presentation.deleteSelection(Set(ids.reversed())).id)
+    }
+}
