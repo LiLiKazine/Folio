@@ -88,6 +88,19 @@ Calls whose failure is discarded without logging (`try?`, Swift's way of throwin
 - The Escape key on the Mac removing a Notice (keystrokes did not land in the check).
 - A file-picker failure Notice appearing while the picker itself is still closing.
 
+## Fixed later: Import asked for while a Notice is showing
+
+Pressing ⌘I, or the Import button, while a Notice was on screen did nothing,
+and from then on the file picker never opened and every later Notice waited
+for it, until relaunch. The system refused the picker but the screen still
+believed it was open. Every Import request now goes through `requestImport()`
+in `LibraryView`. When a Notice or confirmation is on screen, the request waits
+in `ImportRequestGate` (`app/Folio/Library/ImportRequestGate.swift`) and the
+picker opens 150 ms after the dialog closes. Covered by
+`app/FolioTests/ImportRequestGateTests.swift`. The ⌘I-during-a-Notice check
+by hand on the Mac is still needed. It could not be done by an agent because
+the app's window was on another desktop and focus returned to the terminal.
+
 ## Follow-ups
 
 - Untested paths: the reason given when a Source has not finished downloading from iCloud (`sourceNotDownloaded`); several event tests drain only the first event while asserting equality.

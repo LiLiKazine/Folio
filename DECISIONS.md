@@ -282,3 +282,13 @@ plan's Task 3 removed the old failure message type that the Library screen
 used, which would have left the app unable to compile until Task 4. Task 3 was
 therefore allowed the minimal edit to the Library screen to keep the app
 building, and Task 4 finished the presentation.
+
+**An Import asked for while a Notice is showing opens the file picker right
+after the Notice closes.** The Library screen can show only one dialog at a
+time. Before this fix, pressing ⌘I (or the Import button) while a Notice or a
+Rename or Delete confirmation was on screen did nothing, and after that the
+file picker never opened again and no later Notice appeared until Folio was
+relaunched. Now the request waits: once the user closes the dialog, the
+file picker opens 150 ms later, the same pause a waiting Notice gets. Asking
+several times while waiting still opens it once. If another Notice is waiting
+too, whichever appears first is followed by the other.

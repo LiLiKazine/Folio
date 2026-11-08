@@ -9,6 +9,8 @@ struct LibraryView: View {
 
     @Environment(\.scenePhase) private var scenePhase
     @State private var isImporting = false
+    /// An Import asked for while another dialog was on screen; see `requestImport()`.
+    @State private var importRequest = ImportRequestGate()
     @State private var bookToRename: Book?
     @State private var renameTitle = ""
     @State private var bookToDelete: Book?
@@ -39,10 +41,10 @@ struct LibraryView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     #if os(macOS)
-                        Button("Import…", systemImage: "plus") { isImporting = true }
+                        Button("Import…", systemImage: "plus") { requestImport() }
                             .help("Import a folder or zip")
                     #else
-                        Button("Import", systemImage: "plus") { isImporting = true }
+                        Button("Import", systemImage: "plus") { requestImport() }
                     #endif
                 }
                 #if os(iOS)
@@ -59,7 +61,7 @@ struct LibraryView: View {
                 #endif
             }
             #if os(macOS)
-                .focusedSceneValue(\.libraryImporterIsPresented, $isImporting)
+                .focusedSceneValue(\.libraryImporterIsPresented, importerIsPresented)
                 .libraryDropTarget(onImport: importSource)
                 .onChange(of: model.items) {
                     if selectedBook == nil { selection = nil }
@@ -131,6 +133,7 @@ struct LibraryView: View {
             .onChange(of: model.presentedNotice?.id, initial: true) { showPresentedNotice() }
             .onChange(of: shownNotice) { showPresentedNotice() }
             .onChange(of: isPresentingOtherDialog) { showPresentedNotice() }
+            .onChange(of: canPresentImport) { presentRequestedImport() }
             .onAppear {
                 Task { await model.reload() }
             }
@@ -143,7 +146,7 @@ struct LibraryView: View {
 
     @ViewBuilder private var content: some View {
         if model.isLoaded && model.items.isEmpty {
-            LibraryEmptyView { isImporting = true }
+            LibraryEmptyView { requestImport() }
         } else {
             ScrollView {
                 LazyVGrid(
@@ -366,12 +369,59 @@ struct LibraryView: View {
 
     /// True while this view shows the file picker or a confirmation; a Notice waits.
     private var isPresentingOtherDialog: Bool {
+        isImporting || isConfirming
+    }
+
+    /// True while this view shows a Rename or Delete confirmation.
+    private var isConfirming: Bool {
         #if os(iOS)
             let isConfirmingSelection = isConfirmingDeleteSelection
         #else
             let isConfirmingSelection = false
         #endif
-        return isImporting || bookToRename != nil || bookToDelete != nil || isConfirmingSelection
+        return bookToRename != nil || bookToDelete != nil || isConfirmingSelection
+    }
+
+    /// True when no Notice or confirmation is on screen, so the file picker can open.
+    private var canPresentImport: Bool {
+        shownNotice == nil && !isConfirming
+    }
+
+    /// The one way to ask for the file picker: the toolbar button, the empty
+    /// Library's button, and File → Import… (⌘I) on the Mac.
+    ///
+    /// SwiftUI refuses to open the picker while another dialog on this view is
+    /// on screen, yet leaves `isImporting` true; the picker could then never open
+    /// again and every later Notice would wait for it. So a request made then
+    /// waits in `importRequest`, and `presentRequestedImport()` opens the picker
+    /// once that dialog has closed.
+    private func requestImport() {
+        if importRequest.request(canPresent: canPresentImport) {
+            isImporting = true
+        }
+    }
+
+    /// Opens the file picker for a waiting request, `noticeHandOverDelay` after
+    /// the last dialog closed so SwiftUI has finished dismissing it. If a Notice
+    /// took the screen in the meantime, the request keeps waiting for it.
+    private func presentRequestedImport() {
+        guard importRequest.isRequested, canPresentImport else { return }
+        Task {
+            // Ignored: this Task is never cancelled, and the guard below re-checks
+            // everything before the picker opens.
+            try? await Task.sleep(for: Self.noticeHandOverDelay)
+            guard canPresentImport, importRequest.dialogsCleared() else { return }
+            isImporting = true
+        }
+    }
+
+    /// Reads whether the picker is open; setting true asks for it through
+    /// `requestImport()`. Published to File → Import… (⌘I) on the Mac.
+    private var importerIsPresented: Binding<Bool> {
+        Binding(
+            get: { isImporting },
+            set: { if $0 { requestImport() } else { isImporting = false } }
+        )
     }
 
     private static let noticeHandOverDelay = Duration.milliseconds(150)

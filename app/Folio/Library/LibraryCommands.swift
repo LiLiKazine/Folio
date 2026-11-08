@@ -21,6 +21,7 @@
     }
 
     /// Whether the focused Library screen is showing its file picker for an Import.
+    /// Setting it true asks for the picker; it opens once no other dialog is on screen.
     struct LibraryImporterIsPresentedKey: FocusedValueKey {
         typealias Value = Binding<Bool>
     }
