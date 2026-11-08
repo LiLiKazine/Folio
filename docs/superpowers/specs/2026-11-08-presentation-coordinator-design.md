@@ -29,9 +29,14 @@ current.
   for a given Book, Delete confirmation for the selected Books.
 - **Coordinator**: the one object that holds the queue of pending
   Presentations and the single Presentation currently on screen.
-- **Closed**: the moment SwiftUI writes the presentation flag back to false,
-  which per Apple's documentation happens only when a dialog that was shown
-  is finished or cancelled.
+- **Closing**: the moment SwiftUI writes the presentation flag back to
+  false, which per Apple's documentation happens when a dialog that was
+  shown is finished or cancelled. The dialog is still animating away.
+- **Closed**: the moment the dialog is gone from the screen. For a Notice or
+  a confirmation this is the documented `onDisappear` of the dialog's own
+  content (its message text), which SwiftUI calls when that content leaves
+  the view hierarchy. For the file picker, which has no content view of
+  ours, it is the write-back to false followed by one main-actor turn.
 
 ## Goals
 
@@ -40,7 +45,10 @@ current.
   once the screen is free.
 - A dialog is never requested while another is on screen, so the undefined
   "second presentation" case cannot occur for anything Folio presents.
-- No timers, no settle delays, no guard lists.
+- No timers and no empirically chosen delays. The only wait is for the
+  documented `onDisappear` of the closing dialog (or one main-actor turn
+  after the picker's write-back, since the picker has no content of ours).
+  No guard lists.
 - Behaviour visible to the user is unchanged: same dialogs, same copy,
   same actions. The coordinator lives in the shared Library screen, so it
   applies identically on iPhone, iPad, and Mac; only what feeds the queue
@@ -51,12 +59,14 @@ current.
 ## Non-goals
 
 - Dialogs the system presents on its own (permission prompts). Those stay
-  outside our control; a queued Presentation waits and shows at the next
-  state change, as today.
+  outside our control. If one causes SwiftUI to refuse a Presentation the
+  coordinator asked for, there is no documented signal of the refusal and
+  no recovery short of the next state change; this is the residual risk,
+  stated plainly, and it is no worse than today.
 - Changing the Notice queue semantics (ordering, exact-repeat collapse):
   the Notice queue in `LibraryModel` stays; the coordinator consumes it.
-- Multi-window Mac behaviour (each window keeps its own coordinator; a
-  Notice still appears in every window, as today).
+- Multi-window behaviour on Mac and iPad (each window keeps its own
+  coordinator; a Notice still appears in every window, as today).
 
 ## Anti-goals
 
@@ -72,18 +82,26 @@ A value type with no SwiftUI dependency:
 
 - `enum Presentation: Equatable, Identifiable` with the five cases above
   (Rename and Delete carry the `Book`; the Notice case carries the Notice).
-- `struct PresentationQueue`: `private(set) var current: Presentation?`,
-  `private(set) var pending: [Presentation]`.
-  - `mutating func enqueue(_ p: Presentation)`: appends; if `current` is
-    nil, promotes it immediately and returns `true` (meaning "present now").
-    Consecutive identical Notices collapse (same rule as today). An Import
-    picker request while one is already current or pending is ignored (one
-    picker at a time).
-  - `mutating func closed(_ id: Presentation.ID) -> Presentation?`: called
-    when the current Presentation reports it closed; clears `current` and
-    returns the next one, promoting it to `current`, or nil. A stale id
-    (not the current one) is ignored and returns nil.
-  - `var isBusy: Bool { current != nil }`.
+- `struct PresentationQueue` with three states for the screen: idle,
+  showing `current`, and closing (the current dialog is animating away and
+  nothing may be requested yet). Fields: `private(set) var current:
+  Presentation?`, `private(set) var isClosing: Bool`, `private(set) var
+  pending: [Presentation]`.
+  - `mutating func enqueue(_ p: Presentation) -> Bool`: appends; if idle,
+    promotes it immediately and returns `true` ("present now"). A picker
+    request while one is already current or pending is ignored (one picker
+    at a time). No collapsing of Notices here: the model's Notice queue
+    already collapses exact repeats, and the coordinator only ever holds
+    the model's single current Notice (see Notices below).
+  - `mutating func closing(_ id: Presentation.ID)`: SwiftUI wrote the flag
+    back to false; marks the screen closing. A stale id is ignored.
+  - `mutating func closed(_ id: Presentation.ID) -> Presentation?`: the
+    dialog is gone; clears `current` and `isClosing`, promotes and returns
+    the next pending Presentation, or nil. A stale id is ignored.
+  - `var isIdle: Bool { current == nil && !isClosing }`.
+  Because promotion happens only in `closed`, the flag of any one modifier
+  is observably false for the whole dismissal, so the same kind of dialog
+  can follow itself (Notice after Notice).
 
 ### The SwiftUI part
 
@@ -96,11 +114,26 @@ A value type with no SwiftUI dependency:
 - Every place that today sets a flag (`isImporting = true`,
   `bookToRename = book`, `bookToDelete = book`, Select-mode delete, the
   Notice hand-over) instead calls `queue.enqueue(...)`.
-- Notices: the view observes `model.presentedNotice`; whenever it changes
-  to a Notice not yet enqueued, the view enqueues it. The Notice's `OK`
-  calls `model.dismissNotice(id)` as today; the coordinator learns it
-  closed through SwiftUI's write-back, then shows the next Presentation,
-  which may be the next Notice.
+- Notices: the coordinator holds at most one Notice, the model's current
+  one, identified by its id. Whenever the queue becomes idle, or
+  `model.presentedNotice` changes, the view enqueues `.notice(id)` if that
+  id is not already current or pending. The Notice's `OK` calls
+  `model.dismissNotice(id)` as today. A Notice that leaves the screen
+  without OK (the system closed it) is still the model's current Notice,
+  so it is re-enqueued when the queue next goes idle and shown again; a
+  Notice another window already dismissed is no longer the model's current
+  Notice and is never shown.
+- Stale subjects: when a pending Presentation reaches the front, the view
+  checks its subject still exists. Rename or Delete for a Book no longer in
+  `items`, a delete-selection whose captured ids are all gone, or a Notice
+  the model no longer presents is skipped with a log line labelled
+  `// Log-only:` ("the thing the dialog would act on is already gone, so
+  there is nothing to show or to fail"). This is the one justified skip.
+- Capture at request time: Rename and Delete carry the `Book`; the
+  delete-selection carries the `Set<BookID>` selected when the user tapped
+  Delete, and uses that set for both its title count and the deletion, so
+  later selection changes cannot alter what it does. Select mode behaves as
+  today otherwise.
 - Because a Presentation is only ever requested from the coordinator when
   `current` was nil, SwiftUI is never asked to present over an existing
   presentation. The gate, the settle delay, `isSettling`,
@@ -122,9 +155,10 @@ A value type with no SwiftUI dependency:
 ## Tests
 
 - `PresentationQueueTests` (app target, pure): enqueue when idle presents
-  now; enqueue when busy queues in order; `closed` promotes the next;
-  stale `closed` is ignored; identical consecutive Notices collapse; a
-  second picker request is ignored while one is current or pending; mixed
+  now; enqueue when showing or closing queues in order; `closing` blocks
+  promotion; `closed` promotes the next; stale `closing`/`closed` ignored;
+  a second picker request is ignored while one is current or pending; a
+  Notice id already current or pending is not enqueued twice; mixed
   sequence (Notice, picker, Rename, Notice) shows in order.
 - `LibraryModelTests`: unchanged (the Notice queue is unchanged).
 - Manual verification on Mac, on a single-display iPhone simulator, and on
