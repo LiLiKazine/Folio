@@ -745,6 +745,37 @@ import UniformTypeIdentifiers
         #expect(model.notices.isEmpty)
     }
 
+    @Test("with the kinds interleaved, only the Notice shown of each kind can be dismissed")
+    func dismissInterleavedKinds() async throws {
+        let fixture = try makeFixture(imports: InProgressUnreadableImportRepository())
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+        let task = try await startModel(model)
+        defer { task.cancel() }
+
+        // Open the Library at launch, then a Rename, a failing reload, another Rename.
+        await model.rename(BookID(), to: "")
+        await model.reload()
+        await model.rename(BookID(), to: "Missing")
+        #expect(model.notices.map(\.kind) == [.status, .dialog, .status, .dialog])
+        let status1 = model.notices[0]
+        let dialog1 = model.notices[1]
+        let status2 = model.notices[2]
+        let dialog2 = model.notices[3]
+
+        // The second of each kind is waiting, not shown, so dismissing it does nothing.
+        model.dismissNotice(dialog2.id)
+        model.dismissNotice(status2.id)
+        #expect(model.notices == [status1, dialog1, status2, dialog2])
+
+        model.dismissNotice(dialog1.id)
+        #expect(model.presentedNotice == dialog2)
+        #expect(model.statusNotice == status1)
+        model.dismissNotice(status1.id)
+        #expect(model.statusNotice == status2)
+        #expect(model.notices == [status2, dialog2])
+    }
+
     @Test("a repeat is collapsed against the last Notice of its kind")
     func collapseIsPerKind() async throws {
         let bookRepository = FailingBookRepository()

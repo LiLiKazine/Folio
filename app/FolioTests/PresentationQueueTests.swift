@@ -124,4 +124,17 @@ struct PresentationQueueTests {
         #expect(queue.current == .rename(first))
         #expect(queue.pending == [.rename(second)])
     }
+
+    @Test("a repeated dismissal of the last Notice leaves the next one on screen")
+    func repeatedDismissalKeepsNext() {
+        var queue = PresentationQueue()
+        let first = Presentation.notice(.filePickerFailed())
+        let second = Presentation.notice(.filePickerFailed())
+        queue.enqueue(first)
+        queue.enqueue(second)
+        queue.dismissed(first.id)
+        queue.dismissed(first.id)
+        #expect(queue.current == second)
+        #expect(queue.pending.isEmpty)
+    }
 }

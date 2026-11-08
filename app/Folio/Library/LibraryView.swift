@@ -365,27 +365,31 @@ struct LibraryView: View {
 
     /// True while the current dialog is of the kind `match` accepts. SwiftUI
     /// writes false when that dialog goes away, which promotes the next one.
+    /// The setter acts only on the Presentation that was current when the
+    /// binding was made, so a second false written through an old binding,
+    /// after the next dialog has been promoted, cannot take that one away.
     private func isPresenting(_ match: @escaping (Presentation) -> Bool) -> Binding<Bool> {
-        Binding(
+        let shown = queue.current
+        return Binding(
             get: { queue.current.map(match) ?? false },
             set: { isPresented in
-                guard !isPresented, let current = queue.current, match(current) else { return }
-                queue.dismissed(current.id)
+                guard !isPresented, let shown, match(shown) else { return }
+                queue.dismissed(shown.id)
             }
         )
     }
 
     /// Like `isPresenting(_:)` for the Notice dialog; however it goes away, the
-    /// Notice leaves the model too, so it is never shown again.
+    /// Notice leaves the model too, so it is never shown again. Acts only on the
+    /// Notice that was on screen when the binding was made.
     private var noticeIsPresented: Binding<Bool> {
-        Binding(
+        let shown = noticeOnScreen
+        return Binding(
             get: { noticeOnScreen != nil },
             set: { isPresented in
-                guard !isPresented, let current = queue.current,
-                    case .notice(let notice) = current
-                else { return }
-                model.dismissNotice(notice.id)
-                queue.dismissed(current.id)
+                guard !isPresented, let shown else { return }
+                model.dismissNotice(shown.id)
+                queue.dismissed(Presentation.notice(shown).id)
             }
         )
     }
