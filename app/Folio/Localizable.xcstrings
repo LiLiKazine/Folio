@@ -39,8 +39,32 @@
     "Couldn't Import “%@”" : {},
     "Couldn't write to Folio's storage" : {},
     "Delete" : {},
+    "Delete %lld Books?" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Delete %lld Book?"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Delete %lld Books?"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Delete (%lld)" : {},
     "Delete Book" : {},
     "Delete “%@”?" : {},
+    "Done" : {},
     "Folio couldn't open its Library." : {},
     "Import" : {},
     "Import a Book" : {},
@@ -70,8 +94,10 @@
     "Rename…" : {},
     "Retry" : {},
     "Save" : {},
+    "Select" : {},
     "The first page couldn't be read" : {},
     "The folder or zip is no longer available" : {},
+    "Their pages will be removed from Folio." : {},
     "This zip can't be read" : {},
     "This zip format isn't supported" : {},
     "Title" : {},

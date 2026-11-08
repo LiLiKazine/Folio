@@ -16,6 +16,12 @@ struct LibraryView: View {
         /// The Book a single click selected; the target of the Delete key.
         @State private var selection: BookID?
         @FocusState private var gridIsFocused: Bool
+    #else
+        /// Select mode is offered only in the regular width of an iPad.
+        @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+        @State private var isSelecting = false
+        @State private var selectedBookIDs: Set<BookID> = []
+        @State private var isConfirmingDeleteSelection = false
     #endif
 
     init(model: LibraryModel) {
@@ -37,12 +43,45 @@ struct LibraryView: View {
                         Button("Import", systemImage: "plus") { isImporting = true }
                     #endif
                 }
+                #if os(iOS)
+                    if horizontalSizeClass == .regular {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            if isSelecting {
+                                Button("Done") { endSelecting() }
+                            } else {
+                                Button("Select") { isSelecting = true }
+                                    .disabled(!hasBooks)
+                            }
+                        }
+                    }
+                #endif
             }
             #if os(macOS)
                 .focusedSceneValue(\.libraryImporterIsPresented, $isImporting)
                 .libraryDropTarget(onImport: importSource)
                 .onChange(of: model.items) {
                     if selectedBook == nil { selection = nil }
+                }
+            #else
+                .safeAreaInset(edge: .bottom) {
+                    if isSelecting {
+                        LibrarySelectionBar(count: selectedBookIDs.count) {
+                            isConfirmingDeleteSelection = true
+                        }
+                    }
+                }
+                .onChange(of: model.items) { pruneSelection() }
+                .onChange(of: horizontalSizeClass) {
+                    if horizontalSizeClass != .regular { endSelecting() }
+                }
+                .alert(
+                    Text("Delete \(selectedBookIDs.count) Books?"),
+                    isPresented: $isConfirmingDeleteSelection
+                ) {
+                    Button("Delete", role: .destructive, action: deleteSelection)
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Their pages will be removed from Folio.")
                 }
             #endif
             .fileImporter(
@@ -137,42 +176,87 @@ struct LibraryView: View {
             }
             return nil
         }
+    #else
+        private var hasBooks: Bool {
+            model.items.contains { if case .book = $0 { true } else { false } }
+        }
+
+        /// Leaves Select mode; the selection does not outlive it.
+        private func endSelecting() {
+            isSelecting = false
+            selectedBookIDs = []
+        }
+
+        /// Drops selected Books that have left the Library.
+        private func pruneSelection() {
+            var present = Set<BookID>()
+            for case .book(let book) in model.items { present.insert(book.id) }
+            selectedBookIDs.formIntersection(present)
+            if !hasBooks { endSelecting() }
+        }
+
+        private func deleteSelection() {
+            let ids = selectedBookIDs
+            endSelecting()
+            Task {
+                for id in ids { await model.removeBook(id) }
+            }
+        }
     #endif
+
+    /// True while the iPad selects Books; context menus and Import cards step aside.
+    private var isSelectingBooks: Bool {
+        #if os(iOS)
+            isSelecting
+        #else
+            false
+        #endif
+    }
 
     @ViewBuilder private func card(for item: FolioCore.LibraryItem) -> some View {
         switch item {
         case .book(let book):
             bookCard(for: book)
                 .contextMenu {
-                    Button("Rename…", systemImage: "pencil") {
-                        renameTitle = book.title
-                        bookToRename = book
-                    }
-                    Button("Delete Book", systemImage: "trash", role: .destructive) {
-                        bookToDelete = book
+                    if !isSelectingBooks {
+                        Button("Rename…", systemImage: "pencil") {
+                            renameTitle = book.title
+                            bookToRename = book
+                        }
+                        Button("Delete Book", systemImage: "trash", role: .destructive) {
+                            bookToDelete = book
+                        }
                     }
                 }
         case .importRecord(let record):
             ImportCard(record: record, liveProgress: model.liveProgress[record.id]) {
                 Task { await model.retryImport(record.id) }
             }
+            .disabled(isSelectingBooks)
+            .opacity(isSelectingBooks ? 0.4 : 1)
             .contextMenu {
-                switch record.status {
-                case .inProgress, .queued:
-                    Button("Cancel Import", systemImage: "xmark") {
-                        Task { await model.cancelImport(record.id) }
-                    }
-                case .failed:
-                    Button("Retry", systemImage: "arrow.clockwise") {
-                        Task { await model.retryImport(record.id) }
-                    }
-                    Button("Remove", systemImage: "trash", role: .destructive) {
-                        Task { await model.removeImport(record.id) }
-                    }
-                case .completed:
-                    EmptyView()
+                if !isSelectingBooks {
+                    importMenu(for: record)
                 }
             }
+        }
+    }
+
+    @ViewBuilder private func importMenu(for record: FolioCore.Import) -> some View {
+        switch record.status {
+        case .inProgress, .queued:
+            Button("Cancel Import", systemImage: "xmark") {
+                Task { await model.cancelImport(record.id) }
+            }
+        case .failed:
+            Button("Retry", systemImage: "arrow.clockwise") {
+                Task { await model.retryImport(record.id) }
+            }
+            Button("Remove", systemImage: "trash", role: .destructive) {
+                Task { await model.removeImport(record.id) }
+            }
+        case .completed:
+            EmptyView()
         }
     }
 
@@ -197,12 +281,24 @@ struct LibraryView: View {
             }
         }
     #else
-        /// A tap opens.
+        /// A tap opens, or while selecting, adds the Book to or removes it from the selection.
         private func bookCard(for book: Book) -> some View {
-            Button {
-                Task { await model.open(book.id) }
+            let isChecked = isSelecting && selectedBookIDs.contains(book.id)
+            return Button {
+                if isSelecting {
+                    if isChecked {
+                        selectedBookIDs.remove(book.id)
+                    } else {
+                        selectedBookIDs.insert(book.id)
+                    }
+                } else {
+                    Task { await model.open(book.id) }
+                }
             } label: {
-                BookCard(book: book, coverURL: model.coverURL(for: book))
+                BookCard(
+                    book: book, coverURL: model.coverURL(for: book), isSelected: isChecked,
+                    showsCheckmark: isChecked
+                )
             }
             .buttonStyle(.plain)
         }

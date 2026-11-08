@@ -5,8 +5,10 @@ import SwiftUI
 struct BookCard: View {
     let book: Book
     let coverURL: URL
-    /// Shows the selection highlight; only the Mac Library selects Books.
+    /// Shows the selection highlight: the Mac's selected Book, or a Book the iPad selected.
     var isSelected = false
+    /// Adds a checkmark badge to the Cover, for a Book the iPad selected.
+    var showsCheckmark = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -16,6 +18,16 @@ struct BookCard: View {
                         RoundedRectangle(cornerRadius: 9)
                             .strokeBorder(Color.accentColor, lineWidth: 3)
                             .padding(-4)
+                    }
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    if showsCheckmark {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.title2)
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, Color.accentColor)
+                            .padding(6)
+                            .accessibilityHidden(true)
                     }
                 }
                 .padding(.bottom, 4)
