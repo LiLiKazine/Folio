@@ -37,6 +37,7 @@
     "Cancel" : {},
     "Cancel Import" : {},
     "Cancelled" : {},
+    "Close" : {},
     "Couldn't %@" : {},
     "Couldn't Import “%@”" : {},
     "Couldn't write to Folio's storage" : {},

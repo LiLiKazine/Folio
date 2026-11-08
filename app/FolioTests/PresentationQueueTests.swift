@@ -90,4 +90,16 @@ struct PresentationQueueTests {
             Presentation.deleteSelection(Set(ids)).id
                 == Presentation.deleteSelection(Set(ids.reversed())).id)
     }
+
+    @Test("a selection's id ignores order and tells different selections apart")
+    func deleteSelectionIDIsStable() {
+        let first = BookID()
+        let second = BookID()
+        let third = BookID()
+        let forward = Presentation.deleteSelection([first, second, third])
+        let backward = Presentation.deleteSelection(Set([third, second, first]))
+        #expect(forward.id == backward.id)
+        #expect(forward.id != Presentation.deleteSelection([first, second]).id)
+        #expect(forward.id != Presentation.deleteSelection([first, second, BookID()]).id)
+    }
 }

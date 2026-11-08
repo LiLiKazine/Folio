@@ -21,7 +21,8 @@
     }
 
     /// Whether the focused Library screen is showing its file picker for an Import.
-    /// Setting it true asks for the picker; it opens once no other dialog is on screen.
+    /// Setting it true asks for the picker through the screen's `PresentationQueue`:
+    /// it opens now, or after the dialogs asked for before it. Setting false does nothing.
     struct LibraryImporterIsPresentedKey: FocusedValueKey {
         typealias Value = Binding<Bool>
     }

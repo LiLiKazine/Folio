@@ -8,19 +8,10 @@ struct LibraryView: View {
     let model: LibraryModel
 
     @Environment(\.scenePhase) private var scenePhase
-    @State private var isImporting = false
-    /// An Import asked for while another dialog was on screen; see `requestImport()`.
-    @State private var importRequest = ImportRequestGate()
-    /// True for `noticeHandOverDelay` after the last dialog started closing; a
-    /// request then waits, because SwiftUI may still refuse the picker.
-    @State private var isSettling = false
-    /// The running settle; a dialog that opens and closes again restarts it.
-    @State private var settleTask: Task<Void, Never>?
-    @State private var bookToRename: Book?
+    /// Every dialog this screen shows: the one on screen and those waiting.
+    @State private var queue = PresentationQueue()
+    /// The Rename dialog's text field; seeded when a Rename becomes current.
     @State private var renameTitle = ""
-    @State private var bookToDelete: Book?
-    /// The Notice on screen; see `showPresentedNotice()`.
-    @State private var shownNotice: Notice?
     #if os(macOS)
         /// The Book a single click selected; the target of the Delete key.
         @State private var selection: BookID?
@@ -30,7 +21,6 @@ struct LibraryView: View {
         @Environment(\.horizontalSizeClass) private var horizontalSizeClass
         @State private var isSelecting = false
         @State private var selectedBookIDs: Set<BookID> = []
-        @State private var isConfirmingDeleteSelection = false
     #endif
 
     init(model: LibraryModel) {
@@ -39,6 +29,11 @@ struct LibraryView: View {
 
     var body: some View {
         content
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if let notice = model.statusNotice {
+                    LibraryStatusLine(notice: notice) { model.dismissNotice(notice.id) }
+                }
+            }
             .navigationTitle("Library")
             #if os(iOS)
                 .navigationBarTitleDisplayMode(.large)
@@ -46,10 +41,10 @@ struct LibraryView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     #if os(macOS)
-                        Button("Import…", systemImage: "plus") { requestImport() }
+                        Button("Import…", systemImage: "plus") { request(.importPicker) }
                             .help("Import a folder or zip")
                     #else
-                        Button("Import", systemImage: "plus") { requestImport() }
+                        Button("Import", systemImage: "plus") { request(.importPicker) }
                     #endif
                 }
                 #if os(iOS)
@@ -75,7 +70,7 @@ struct LibraryView: View {
                 .safeAreaInset(edge: .bottom) {
                     if isSelecting {
                         LibrarySelectionBar(count: selectedBookIDs.count) {
-                            isConfirmingDeleteSelection = true
+                            request(.deleteSelection(selectedBookIDs))
                         }
                     }
                 }
@@ -84,24 +79,27 @@ struct LibraryView: View {
                     if horizontalSizeClass != .regular { endSelecting() }
                 }
                 .alert(
-                    Text("Delete \(selectedBookIDs.count) Books?"),
-                    isPresented: $isConfirmingDeleteSelection
-                ) {
-                    Button("Delete", role: .destructive, action: deleteSelection)
+                    Text("Delete \(selectionToDelete?.count ?? 0) Books?"),
+                    isPresented: isPresenting {
+                        if case .deleteSelection = $0 { true } else { false }
+                    },
+                    presenting: selectionToDelete
+                ) { ids in
+                    Button("Delete", role: .destructive) { deleteSelection(ids) }
                     Button("Cancel", role: .cancel) {}
-                } message: {
+                } message: { _ in
                     Text("Their pages will be removed from Folio.")
                 }
             #endif
             .fileImporter(
-                isPresented: $isImporting,
+                isPresented: isPresenting { $0 == .importPicker },
                 allowedContentTypes: [.folder, .zip],
                 allowsMultipleSelection: false,
                 onCompletion: importPicked
             )
             .alert(
                 "Rename Book",
-                isPresented: isPresenting($bookToRename),
+                isPresented: isPresenting { if case .rename = $0 { true } else { false } },
                 presenting: bookToRename
             ) { book in
                 TextField("Title", text: $renameTitle)
@@ -114,7 +112,7 @@ struct LibraryView: View {
             }
             .alert(
                 Text("Delete “\(bookToDelete?.title ?? "")”?"),
-                isPresented: isPresenting($bookToDelete),
+                isPresented: isPresenting { if case .deleteBook = $0 { true } else { false } },
                 presenting: bookToDelete
             ) { book in
                 Button("Delete", role: .destructive) {
@@ -125,20 +123,19 @@ struct LibraryView: View {
                 Text("Its pages will be removed from Folio.")
             }
             .alert(
-                shownNotice?.title ?? "",
+                noticeOnScreen?.title ?? "",
                 isPresented: noticeIsPresented,
-                presenting: shownNotice
+                presenting: noticeOnScreen
             ) { notice in
-                // The only place a Notice leaves the model. The cancel role makes
-                // Escape go through this button too.
+                // The cancel role makes Escape go through this button too.
                 Button("OK", role: .cancel) { model.dismissNotice(notice.id) }
             } message: { notice in
                 Text(notice.message)
             }
-            .onChange(of: model.presentedNotice?.id, initial: true) { showPresentedNotice() }
-            .onChange(of: shownNotice) { showPresentedNotice() }
-            .onChange(of: isPresentingOtherDialog) { showPresentedNotice() }
-            .onChange(of: canPresentImport) { settleAfterDialogs() }
+            .onChange(of: model.presentedNotice?.id, initial: true) { requestPresentedNotice() }
+            .onChange(of: queue.current?.id) {
+                if case .rename(let book) = queue.current { renameTitle = book.title }
+            }
             .onAppear {
                 Task { await model.reload() }
             }
@@ -151,7 +148,7 @@ struct LibraryView: View {
 
     @ViewBuilder private var content: some View {
         if model.isLoaded && model.items.isEmpty {
-            LibraryEmptyView { requestImport() }
+            LibraryEmptyView { request(.importPicker) }
         } else {
             ScrollView {
                 LazyVGrid(
@@ -181,7 +178,7 @@ struct LibraryView: View {
         /// selection, which leaves the Delete key and Edit → Delete disabled.
         private var deleteSelectedBook: (() -> Void)? {
             guard let book = selectedBook else { return nil }
-            return { bookToDelete = book }
+            return { request(.deleteBook(book)) }
         }
 
         private var selectedBook: Book? {
@@ -210,8 +207,9 @@ struct LibraryView: View {
             if !hasBooks { endSelecting() }
         }
 
-        private func deleteSelection() {
-            let ids = selectedBookIDs
+        /// Deletes the Books captured when the user tapped Delete, which may
+        /// differ from the selection now.
+        private func deleteSelection(_ ids: Set<BookID>) {
             endSelecting()
             Task {
                 for id in ids { await model.removeBook(id) }
@@ -234,12 +232,9 @@ struct LibraryView: View {
             bookCard(for: book)
                 .contextMenu {
                     if !isSelectingBooks {
-                        Button("Rename…", systemImage: "pencil") {
-                            renameTitle = book.title
-                            bookToRename = book
-                        }
+                        Button("Rename…", systemImage: "pencil") { request(.rename(book)) }
                         Button("Delete Book", systemImage: "trash", role: .destructive) {
-                            bookToDelete = book
+                            request(.deleteBook(book))
                         }
                     }
                 }
@@ -340,117 +335,75 @@ struct LibraryView: View {
         }
     }
 
-    /// Shows the model's presented Notice once no dialog on this view is open.
-    ///
-    /// The Notice dialog is driven by `shownNotice`, not by the model, and the
-    /// hand-over waits for every other dialog to close: `shownNotice` becomes nil
-    /// only when SwiftUI writes `isPresented = false`, and the next Notice is set
-    /// only after that, plus `noticeHandOverDelay` so the closing dialog has
-    /// finished animating out and `isPresented` is seen going false then true.
-    ///
-    /// It also waits while this view shows the file picker, a Rename or Delete
-    /// confirmation: SwiftUI refuses a second presentation from the same view
-    /// without ever writing `isPresented = false`, so handing over then would
-    /// leave `shownNotice` set and block every later Notice. Closing that dialog
-    /// changes `isPresentingOtherDialog`, which calls this again.
-    ///
-    /// Only the OK button removes a Notice from the model, and only the Notice
-    /// that button was shown with (`dismissNotice(_:)` checks the id). A late
-    /// `isPresented = false` that clears the next Notice only hides it; it is
-    /// still first in the model and is set again from here.
-    private func showPresentedNotice() {
-        guard shownNotice == nil, !isPresentingOtherDialog, let next = model.presentedNotice
-        else { return }
-        Task {
-            // Ignored: this Task is never cancelled, and the guard below re-checks
-            // everything before a Notice is shown.
-            try? await Task.sleep(for: Self.noticeHandOverDelay)
-            guard shownNotice == nil, !isPresentingOtherDialog,
-                model.presentedNotice?.id == next.id
-            else { return }
-            shownNotice = next
-        }
+    /// The one way to ask for a dialog: it shows now if none is on screen,
+    /// otherwise after every dialog asked for before it.
+    private func request(_ presentation: Presentation) {
+        queue.enqueue(presentation)
     }
 
-    /// True while this view shows the file picker or a confirmation; a Notice waits.
-    private var isPresentingOtherDialog: Bool {
-        isImporting || isConfirming
+    /// Asks for the model's presented Notice unless it is already on screen or waiting.
+    private func requestPresentedNotice() {
+        guard let notice = model.presentedNotice else { return }
+        let presentation = Presentation.notice(notice)
+        let isQueued =
+            queue.current?.id == presentation.id
+            || queue.pending.contains { $0.id == presentation.id }
+        if !isQueued { request(presentation) }
     }
 
-    /// True while this view shows a Rename or Delete confirmation.
-    private var isConfirming: Bool {
-        #if os(iOS)
-            let isConfirmingSelection = isConfirmingDeleteSelection
-        #else
-            let isConfirmingSelection = false
-        #endif
-        return bookToRename != nil || bookToDelete != nil || isConfirmingSelection
-    }
-
-    /// True when no Notice or confirmation is on screen, so the file picker can open.
-    private var canPresentImport: Bool {
-        shownNotice == nil && !isConfirming
-    }
-
-    /// The one way to ask for the file picker: the toolbar button, the empty
-    /// Library's button, and File → Import… (⌘I) on the Mac.
-    ///
-    /// SwiftUI refuses to open the picker while another dialog on this view is
-    /// on screen, yet leaves `isImporting` true; the picker could then never open
-    /// again and every later Notice would wait for it. So a request made then
-    /// waits in `importRequest`, and `settleAfterDialogs()` opens the picker
-    /// once that dialog has closed.
-    private func requestImport() {
-        if importRequest.request(canPresent: canPresentImport && !isSettling) {
-            isImporting = true
-        }
-    }
-
-    /// Starts the settle once the last dialog has started closing: for
-    /// `noticeHandOverDelay` `isSettling` holds new requests, since SwiftUI may
-    /// still be dismissing the dialog and would refuse the picker. When the
-    /// settle ends, a waiting request opens the picker. If a Notice took the
-    /// screen in the meantime, the request keeps waiting for it.
-    private func settleAfterDialogs() {
-        guard canPresentImport else { return }
-        settleTask?.cancel()
-        isSettling = true
-        settleTask = Task {
-            do {
-                try await Task.sleep(for: Self.noticeHandOverDelay)
-            } catch {
-                // Cancelled: a newer settle has started and owns `isSettling`.
-                return
-            }
-            isSettling = false
-            guard canPresentImport, importRequest.dialogsCleared() else { return }
-            isImporting = true
-        }
-    }
-
-    /// Reads whether the picker is open; setting true asks for it through
-    /// `requestImport()`. Published to File → Import… (⌘I) on the Mac.
-    private var importerIsPresented: Binding<Bool> {
+    /// True while the current dialog is of the kind `match` accepts. SwiftUI
+    /// writes false when that dialog goes away, which promotes the next one.
+    private func isPresenting(_ match: @escaping (Presentation) -> Bool) -> Binding<Bool> {
         Binding(
-            get: { isImporting },
-            set: { if $0 { requestImport() } else { isImporting = false } }
+            get: { queue.current.map(match) ?? false },
+            set: { isPresented in
+                guard !isPresented, let current = queue.current, match(current) else { return }
+                queue.dismissed(current.id)
+            }
         )
     }
 
-    private static let noticeHandOverDelay = Duration.milliseconds(150)
-
-    /// Setting false only hides the dialog; the model keeps the Notice until OK.
+    /// Like `isPresenting(_:)` for the Notice dialog; however it goes away, the
+    /// Notice leaves the model too, so it is never shown again.
     private var noticeIsPresented: Binding<Bool> {
         Binding(
-            get: { shownNotice != nil },
-            set: { if !$0 { shownNotice = nil } }
+            get: { noticeOnScreen != nil },
+            set: { isPresented in
+                guard !isPresented, let current = queue.current,
+                    case .notice(let notice) = current
+                else { return }
+                model.dismissNotice(notice.id)
+                queue.dismissed(current.id)
+            }
         )
     }
 
-    private func isPresenting(_ book: Binding<Book?>) -> Binding<Bool> {
-        Binding(
-            get: { book.wrappedValue != nil },
-            set: { if !$0 { book.wrappedValue = nil } }
-        )
+    private var noticeOnScreen: Notice? {
+        if case .notice(let notice) = queue.current { notice } else { nil }
     }
+
+    private var bookToRename: Book? {
+        if case .rename(let book) = queue.current { book } else { nil }
+    }
+
+    private var bookToDelete: Book? {
+        if case .deleteBook(let book) = queue.current { book } else { nil }
+    }
+
+    #if os(iOS)
+        private var selectionToDelete: Set<BookID>? {
+            if case .deleteSelection(let ids) = queue.current { ids } else { nil }
+        }
+    #endif
+
+    #if os(macOS)
+        /// Reads whether the file picker is on screen; setting true asks for it
+        /// through `request(_:)`. Published to File → Import… (⌘I).
+        private var importerIsPresented: Binding<Bool> {
+            Binding(
+                get: { queue.current == .importPicker },
+                set: { if $0 { request(.importPicker) } }
+            )
+        }
+    #endif
 }
