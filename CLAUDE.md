@@ -13,6 +13,19 @@ under _Avoid_. Introducing a new domain concept, or changing the meaning of an
 existing one, requires confirming with the project owner first; once agreed,
 add it to `CONTEXT.md` before using it anywhere else.
 
+## Writing for the owner
+
+Anything written for the project owner to decide on — rulings, summaries,
+questions — is written in plain language. Glossary terms appear as they are;
+every other term is either avoided or defined in the same sentence; the
+consequence is stated as what a user would experience, not what the code does.
+
+A mechanism that changes user-visible behaviour (how clean-up at launch works,
+where temporary files go, what happens after a crash) gets a plain-language
+definition before it is used in any ruling. That definition lives in the
+decision log entry that introduces the mechanism, not in `CONTEXT.md`, which
+stays a domain glossary.
+
 ## Architecture
 
 SwiftUI app targeting iOS and macOS, bundle identifier `io.lilikaine.github.folio`.
