@@ -110,3 +110,22 @@ non-Completed Imports); domain events tell the screen when to refresh.
   `LibraryStorage.booksDirectory()`. Rejected: making the pipeline property
   public just for Cover lookup.
 - Library errors are logged with `AppLog.library` and never thrown to the view.
+
+## Implementation notes: Library screen (Task 11)
+
+- `FolioApp` builds the real `Library` (SwiftData repositories, `ImportPipeline`,
+  `FileSourceAccess`) once in `init`; if storage setup throws it logs with
+  `AppLog.general` and shows "Folio couldn't open its Library." instead of crashing.
+- `LibraryModel.start()` runs from the root `.task`, guarded by an app-level
+  `hasStarted` flag so a second window (Mac, iPad) never starts the Library twice.
+  Known gap: if the first window closes, its task ends and event handling stops;
+  the multi-window story belongs to Tasks 12/13.
+- `LibraryItem` collides with SwiftUI's own `LibraryItem` protocol (Xcode
+  library items); the view spells it `FolioCore.LibraryItem`.
+- `xcodebuild` emits `.stringsdata` but never writes `Localizable.xcstrings`
+  (only the Xcode IDE does). The catalog was synced with
+  `xcrun xcstringstool sync <xcstrings> --stringsdata …` from DerivedData, and
+  `%lld pages` given English one/other plural variations.
+- `readingPosition` is shown as a 0-based Page index (`Page n+1 of N`); the
+  reader (later) must store it that way.
+- Covers decode with ImageIO in a `@concurrent` function, off the main actor.

@@ -1,7 +1,79 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-
+    "%lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "%lld pages" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld page"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld pages"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Cancel" : {},
+    "Cancel Import" : {},
+    "Cancelled" : {},
+    "Couldn't Import “%@”" : {},
+    "Couldn't write to Folio's storage" : {},
+    "Delete" : {},
+    "Delete Book" : {},
+    "Delete “%@”?" : {},
+    "Folio couldn't open its Library." : {},
+    "Import" : {},
+    "Import a Book" : {},
+    "Import a folder of images, or a zip of one, from Files." : {},
+    "Its pages will be removed from Folio." : {},
+    "Library" : {},
+    "No Books yet" : {},
+    "No images found" : {},
+    "Not downloaded to this device" : {},
+    "Not enough storage" : {},
+    "OK" : {},
+    "Page %lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Page %1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "Preparing…" : {},
+    "Remove" : {},
+    "Rename Book" : {},
+    "Rename…" : {},
+    "Retry" : {},
+    "Save" : {},
+    "The first page couldn't be read" : {},
+    "The folder or zip is no longer available" : {},
+    "This zip can't be read" : {},
+    "This zip format isn't supported" : {},
+    "Title" : {},
+    "Waiting" : {}
   },
   "version" : "1.0"
 }
