@@ -64,3 +64,23 @@ non-Completed Imports); domain events tell the screen when to refresh.
   avoids restored records with no files.
 - Re-sorting the grid live when a Book is opened would shuffle cards under
   the user's finger; the order refreshes when the screen next appears.
+
+## Implementation notes: Library actor (Task 7)
+
+- `Library` is an actor; its scheduler is one unstructured `Task` that loops
+  over Queued Imports. Cancelling the In Progress Import cancels that whole
+  task, so the loop exits and immediately starts a fresh task for whatever is
+  still Queued. Rejected: one task per Import (more churn for no gain) and
+  per-Import child tasks (cancellation would need a separate handle map).
+- A `queueChanged` flag closes a lost-wakeup gap: `createImport` can run while
+  the scheduler awaits the repository and finds it empty, so the scheduler
+  re-checks before going idle.
+- The scheduler keeps the running Import on the actor (`running`) and decides
+  `importStarted` vs `importProgressed` from whether `pagesTotal` is known yet;
+  launch recovery and retry reset `pagesTotal` to nil so the next run starts
+  with `importStarted`.
+- `cancelImport` checks `running` after its repository read, so an Import the
+  scheduler has just taken is cancelled through the task rather than being
+  marked Failed underneath it.
+- Launch reconciliation only touches UUID-named folders in the Books
+  directory, so the SwiftData store living there is left alone.

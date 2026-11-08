@@ -14,7 +14,7 @@ public struct ImportPipeline: Sendable {
     private static let pagesName = "pages"
     private static let expandedName = "expanded"
 
-    private let booksDirectory: URL
+    let booksDirectory: URL
     private let storage: StorageCapacity
     /// FileManager is not `Sendable`, but Apple documents its methods as thread-safe
     /// when no delegate is set; the pipeline never sets one.
@@ -30,7 +30,7 @@ public struct ImportPipeline: Sendable {
         self.fileManager = fileManager
     }
 
-    private var stagingRoot: URL { booksDirectory.appending(path: Self.stagingName) }
+    var stagingRoot: URL { booksDirectory.appending(path: Self.stagingName) }
 
     /// Staging lives at `<booksDirectory>/.staging/<bookID>`; the final folder is `<booksDirectory>/<bookID>`.
     /// `progress` receives (pagesDone, pagesTotal), first call with (0, total).
