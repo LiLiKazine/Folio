@@ -14,6 +14,7 @@ import UniformTypeIdentifiers
     private struct Fixture {
         let root: URL
         let booksDirectory: URL
+        let library: Library
         let model: LibraryModel
     }
 
@@ -28,7 +29,7 @@ import UniformTypeIdentifiers
             pipeline: ImportPipeline(booksDirectory: booksDirectory),
             sourceAccess: InMemorySourceAccess())
         return Fixture(
-            root: root, booksDirectory: booksDirectory,
+            root: root, booksDirectory: booksDirectory, library: library,
             model: LibraryModel(library: library, booksDirectory: booksDirectory))
     }
 
@@ -63,10 +64,10 @@ import UniformTypeIdentifiers
     /// Polls every 50 ms until `condition` holds; records an issue after 5 s.
     private func waitUntil(
         _ description: String, sourceLocation: SourceLocation = #_sourceLocation,
-        _ condition: () -> Bool
+        _ condition: () async throws -> Bool
     ) async throws {
         let deadline = ContinuousClock.now + .seconds(5)
-        while !condition() {
+        while try await !condition() {
             guard ContinuousClock.now < deadline else {
                 Issue.record(
                     "Timed out waiting until \(description)", sourceLocation: sourceLocation)
@@ -162,7 +163,21 @@ import UniformTypeIdentifiers
         let before = model.items
         let olderBook = try #require(books(in: before).last)
 
+        let handledBeforeOpen = model.handledEventCount
         await model.open(olderBook.id)
+
+        try await waitUntil("the Library records the open") {
+            try await fixture.library.items().contains {
+                if case .book(let book) = $0 {
+                    book.id == olderBook.id && book.lastOpenedAt != nil
+                } else {
+                    false
+                }
+            }
+        }
+        try await waitUntil("the model has handled the BookOpened event") {
+            model.handledEventCount > handledBeforeOpen
+        }
         #expect(model.items == before)
 
         await model.reload()

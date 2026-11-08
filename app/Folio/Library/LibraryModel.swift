@@ -19,6 +19,8 @@ import Observation
     private(set) var liveProgress: [ImportID: (done: Int, total: Int)] = [:]
     var failureAlert: FailureAlert?
     var isLoaded = false
+    /// Events fully handled by `start()`; lets tests wait for an event that changes no state.
+    private(set) var handledEventCount = 0
 
     private let library: Library
     private let booksDirectory: URL
@@ -137,5 +139,6 @@ import Observation
         case .bookOpened:
             break
         }
+        handledEventCount += 1
     }
 }
