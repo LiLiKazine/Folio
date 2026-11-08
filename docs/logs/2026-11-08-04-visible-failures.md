@@ -96,7 +96,9 @@ for it, until relaunch. The system refused the picker but the screen still
 believed it was open. Every Import request now goes through `requestImport()`
 in `LibraryView`. When a Notice or confirmation is on screen, the request waits
 in `ImportRequestGate` (`app/Folio/Library/ImportRequestGate.swift`) and the
-picker opens 150 ms after the dialog closes. Covered by
+picker opens 150 ms after the dialog closes. A request made during those
+150 ms, while the dialog is still closing, also waits for them, because the
+system can still refuse the picker then. Covered by
 `app/FolioTests/ImportRequestGateTests.swift`. The ⌘I-during-a-Notice check
 by hand on the Mac is still needed. It could not be done by an agent because
 the app's window was on another desktop and focus returned to the terminal.

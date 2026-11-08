@@ -49,4 +49,27 @@ struct ImportRequestGateTests {
         #expect(firstClear)
         #expect(!secondClear)
     }
+
+    /// The view passes `canPresent: false` while a closing dialog settles.
+    @Test("a request while a dialog is still closing is remembered")
+    func requestWhileSettling() {
+        var gate = ImportRequestGate()
+        let isSettling = true
+        let presents = gate.request(canPresent: !isSettling)
+        #expect(!presents)
+        #expect(gate.isRequested)
+        let presentsAfterSettle = gate.dialogsCleared()
+        #expect(presentsAfterSettle)
+    }
+
+    @Test("a waiting request followed by one made while free opens the picker once")
+    func waitingThenFreeRequest() {
+        var gate = ImportRequestGate()
+        _ = gate.request(canPresent: false)
+        let presents = gate.request(canPresent: true)
+        #expect(presents)
+        #expect(!gate.isRequested)
+        let presentsAgain = gate.dialogsCleared()
+        #expect(!presentsAgain)
+    }
 }

@@ -11,6 +11,11 @@ struct LibraryView: View {
     @State private var isImporting = false
     /// An Import asked for while another dialog was on screen; see `requestImport()`.
     @State private var importRequest = ImportRequestGate()
+    /// True for `noticeHandOverDelay` after the last dialog started closing; a
+    /// request then waits, because SwiftUI may still refuse the picker.
+    @State private var isSettling = false
+    /// The running settle; a dialog that opens and closes again restarts it.
+    @State private var settleTask: Task<Void, Never>?
     @State private var bookToRename: Book?
     @State private var renameTitle = ""
     @State private var bookToDelete: Book?
@@ -133,7 +138,7 @@ struct LibraryView: View {
             .onChange(of: model.presentedNotice?.id, initial: true) { showPresentedNotice() }
             .onChange(of: shownNotice) { showPresentedNotice() }
             .onChange(of: isPresentingOtherDialog) { showPresentedNotice() }
-            .onChange(of: canPresentImport) { presentRequestedImport() }
+            .onChange(of: canPresentImport) { settleAfterDialogs() }
             .onAppear {
                 Task { await model.reload() }
             }
@@ -393,23 +398,31 @@ struct LibraryView: View {
     /// SwiftUI refuses to open the picker while another dialog on this view is
     /// on screen, yet leaves `isImporting` true; the picker could then never open
     /// again and every later Notice would wait for it. So a request made then
-    /// waits in `importRequest`, and `presentRequestedImport()` opens the picker
+    /// waits in `importRequest`, and `settleAfterDialogs()` opens the picker
     /// once that dialog has closed.
     private func requestImport() {
-        if importRequest.request(canPresent: canPresentImport) {
+        if importRequest.request(canPresent: canPresentImport && !isSettling) {
             isImporting = true
         }
     }
 
-    /// Opens the file picker for a waiting request, `noticeHandOverDelay` after
-    /// the last dialog closed so SwiftUI has finished dismissing it. If a Notice
-    /// took the screen in the meantime, the request keeps waiting for it.
-    private func presentRequestedImport() {
-        guard importRequest.isRequested, canPresentImport else { return }
-        Task {
-            // Ignored: this Task is never cancelled, and the guard below re-checks
-            // everything before the picker opens.
-            try? await Task.sleep(for: Self.noticeHandOverDelay)
+    /// Starts the settle once the last dialog has started closing: for
+    /// `noticeHandOverDelay` `isSettling` holds new requests, since SwiftUI may
+    /// still be dismissing the dialog and would refuse the picker. When the
+    /// settle ends, a waiting request opens the picker. If a Notice took the
+    /// screen in the meantime, the request keeps waiting for it.
+    private func settleAfterDialogs() {
+        guard canPresentImport else { return }
+        settleTask?.cancel()
+        isSettling = true
+        settleTask = Task {
+            do {
+                try await Task.sleep(for: Self.noticeHandOverDelay)
+            } catch {
+                // Cancelled: a newer settle has started and owns `isSettling`.
+                return
+            }
+            isSettling = false
             guard canPresentImport, importRequest.dialogsCleared() else { return }
             isImporting = true
         }
