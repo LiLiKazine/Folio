@@ -49,13 +49,15 @@ import Observation
         }
     }
 
+    /// Reloads the items. A failure has no action of the user's behind it, so it
+    /// queues the Update the Library Notice that says what they see may be out of date.
     func reload() async {
         do {
             items = try await library.items()
         } catch {
             AppLog.library.error(
                 "Could not load the Library: \(String(describing: error), privacy: .public)")
-            queue(Notice(error: error))
+            queue(Notice(storageFailed: .updateLibrary))
         }
     }
 

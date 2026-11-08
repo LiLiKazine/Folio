@@ -381,7 +381,7 @@ import UniformTypeIdentifiers
             copy(of: model.notices) == [
                 [
                     "Couldn't Update the Library",
-                    "Folio couldn't save the change. Try again; if it keeps happening, relaunch Folio.",
+                    "Folio couldn't save the change. What you see may be out of date; relaunch Folio to refresh.",
                 ]
             ])
     }
