@@ -351,6 +351,7 @@ public actor Library {
         case SourceAccessError.unavailable: .sourceUnavailable
         case SourceAccessError.notDownloaded: .sourceNotDownloaded
         case is CancellationError: .cancelled
+        case _ where ImportPipeline.isReadFailure(error): .sourceUnavailable
         default: .storageFailure
         }
     }

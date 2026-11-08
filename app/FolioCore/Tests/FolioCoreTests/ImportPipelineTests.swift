@@ -233,6 +233,33 @@ struct ImportPipelineTests {
         #expect(await log.calls == [[0, 3], [1, 3], [2, 3], [3, 3]])
     }
 
+    @Test("a Page deleted from the Source before it is copied fails with sourceUnavailable")
+    func pageDeletedBeforeCopy() async throws {
+        let fixture = try Fixture()
+        defer { fixture.directory.remove() }
+        let source = try fixture.folderSource(["1.png", "2.png"])
+        let doomed = source.appending(path: "2.png")
+
+        await #expect(throws: ImportFailure(reason: .sourceUnavailable)) {
+            try await fixture.pipeline.run(source: source, bookID: BookID(), title: "Title") {
+                done, _ in
+                if done == 0 { try? FileManager.default.removeItem(at: doomed) }
+            }
+        }
+        #expect(fixture.leftovers().isEmpty)
+    }
+
+    @Test("read-side errors are told apart from write-side ones")
+    func readFailureClassification() {
+        #expect(ImportPipeline.isReadFailure(CocoaError(.fileReadNoSuchFile)))
+        #expect(ImportPipeline.isReadFailure(CocoaError(.fileReadNoPermission)))
+        #expect(ImportPipeline.isReadFailure(CocoaError(.fileNoSuchFile)))
+        #expect(ImportPipeline.isReadFailure(POSIXError(.ENOENT)))
+        #expect(ImportPipeline.isReadFailure(POSIXError(.EACCES)))
+        #expect(!ImportPipeline.isReadFailure(CocoaError(.fileWriteNoPermission)))
+        #expect(!ImportPipeline.isReadFailure(CocoaError(.fileWriteOutOfSpace)))
+    }
+
     @Test("removeAllStaging clears leftovers")
     func staging() async throws {
         let fixture = try Fixture()

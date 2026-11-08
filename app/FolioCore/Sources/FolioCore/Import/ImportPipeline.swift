@@ -115,7 +115,7 @@ public struct ImportPipeline: Sendable {
             let page = Page(
                 fileName: String(format: "%04d", index + 1) + "." + file.pathExtension.lowercased())
             let destination = pagesFolder.appending(path: page.fileName)
-            try fileSystem {
+            try fileSystem(readingSource: !isZip) {
                 if isZip {
                     try fileManager.moveItem(at: file, to: destination)
                 } else {
@@ -179,14 +179,43 @@ public struct ImportPipeline: Sendable {
         }
     }
 
-    /// Runs a file-system operation, mapping out-of-space to `.notEnoughStorage`
-    /// and any other failure to `.storageFailure`.
-    private func fileSystem(_ operation: () throws -> Void) throws {
+    /// Runs a file-system operation, mapping out-of-space to `.notEnoughStorage` and
+    /// any other failure to `.storageFailure`. When the operation reads the Source,
+    /// a read-side failure (missing file, no permission) is `.sourceUnavailable`.
+    private func fileSystem(readingSource: Bool = false, _ operation: () throws -> Void) throws {
         do {
             try operation()
         } catch {
-            throw ImportFailure(
-                reason: Self.isOutOfSpace(error) ? .notEnoughStorage : .storageFailure)
+            let reason: ImportFailureReason =
+                if Self.isOutOfSpace(error) {
+                    .notEnoughStorage
+                } else if readingSource, Self.isReadFailure(error) {
+                    .sourceUnavailable
+                } else {
+                    .storageFailure
+                }
+            throw ImportFailure(reason: reason)
+        }
+    }
+
+    /// True for errors that mean a file could not be read: Cocoa read-side codes,
+    /// or POSIX `ENOENT`/`EACCES`. A Cocoa error is judged by its own code alone, so
+    /// a write failure wrapping `EACCES` stays a write failure.
+    static func isReadFailure(_ error: any Error) -> Bool {
+        let error = error as NSError
+        switch error.domain {
+        case NSCocoaErrorDomain:
+            return [
+                NSFileReadNoSuchFileError, NSFileReadNoPermissionError, NSFileReadUnknownError,
+                NSFileNoSuchFileError,
+            ].contains(error.code)
+        case NSPOSIXErrorDomain:
+            return error.code == Int(ENOENT) || error.code == Int(EACCES)
+        default:
+            guard let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError else {
+                return false
+            }
+            return isReadFailure(underlying)
         }
     }
 
