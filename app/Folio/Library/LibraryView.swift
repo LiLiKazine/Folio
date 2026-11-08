@@ -81,6 +81,12 @@ struct LibraryView: View {
             #endif
             .background { dialogHost }
             .onChange(of: model.presentedNotice?.id, initial: true) { requestPresentedNotice() }
+            // A status line appears without taking focus, so VoiceOver says its title.
+            .onChange(of: model.statusNotice?.id) {
+                if let notice = model.statusNotice {
+                    AccessibilityNotification.Announcement(notice.title).post()
+                }
+            }
             .onAppear {
                 Task { await model.reload() }
             }
