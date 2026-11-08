@@ -56,10 +56,21 @@ check is needed at the request sites.
   captured whatever window was in front (a terminal), not Folio. A capture of
   the Folio window alone (`screencapture -l <window id>`) showed the empty
   state unchanged.
-- Two dialogs of the same kind in a row (two Notices) keep the same
-  `isPresented` binding true across the hand-over while its `presenting:`
-  value changes. Whether SwiftUI shows the second one is for the owner's
-  manual check; if it does not, that is a finding, not something to patch
-  with a delay.
+- Two dialogs of the same kind in a row (two Notices) kept the same
+  `isPresented` binding true across the hand-over while only its
+  `presenting:` value changed, and SwiftUI might never show the second, which
+  would leave the queue waiting for a write-back that never comes. Fixed
+  (review round 1) without a delay: every dialog modifier now sits on a
+  carrier view (`dialogHost`, a `Color.clear` in `.background`) keyed with
+  `.id(queue.current?.id)`. SwiftUI documents that a changed `.id` makes a
+  new view, so each Presentation is a new presentation request. The grid
+  itself is not keyed, so its scroll position survives.
+- The same request made twice (⌘I pressed again while the picker waits) was
+  queued twice. `PresentationQueue.enqueue` now ignores a request whose id is
+  already current or pending; the design's "Nothing is filtered" was changed
+  to say so.
+- The Rename field is seeded when the Rename is asked for, so it never shows
+  the previous Book's Title. Dialogs are modal, so a second Rename cannot be
+  asked for while one waits.
 - The status line uses a top safe-area inset rather than a `VStack`, so the
   iOS large title still tracks the grid's scroll view.

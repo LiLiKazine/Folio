@@ -30,8 +30,12 @@ struct PresentationQueue: Equatable, Sendable {
 
     init() {}
 
-    /// Becomes current when idle, otherwise waits behind everything already queued.
+    /// Becomes current when idle, otherwise waits behind everything already
+    /// queued. A request whose id is already current or pending is ignored:
+    /// the same request twice is one request.
     mutating func enqueue(_ presentation: Presentation) {
+        guard current?.id != presentation.id, !pending.contains(where: { $0.id == presentation.id })
+        else { return }
         if current == nil {
             current = presentation
         } else {

@@ -83,15 +83,7 @@ struct PresentationQueueTests {
         #expect(queue.pending.isEmpty)
     }
 
-    @Test("a multi-delete id does not depend on selection order")
-    func deleteSelectionIDIsOrderIndependent() {
-        let ids = [BookID(), BookID(), BookID()]
-        #expect(
-            Presentation.deleteSelection(Set(ids)).id
-                == Presentation.deleteSelection(Set(ids.reversed())).id)
-    }
-
-    @Test("a selection's id ignores order and tells different selections apart")
+    @Test("a multi-delete id ignores selection order and tells different selections apart")
     func deleteSelectionIDIsStable() {
         let first = BookID()
         let second = BookID()
@@ -101,5 +93,35 @@ struct PresentationQueueTests {
         #expect(forward.id == backward.id)
         #expect(forward.id != Presentation.deleteSelection([first, second]).id)
         #expect(forward.id != Presentation.deleteSelection([first, second, BookID()]).id)
+    }
+
+    @Test("asking for the picker while it is current is one request")
+    func duplicateCurrentIgnored() {
+        var queue = PresentationQueue()
+        queue.enqueue(.importPicker)
+        queue.enqueue(.importPicker)
+        #expect(queue.current == .importPicker)
+        #expect(queue.pending.isEmpty)
+    }
+
+    @Test("asking to rename the same Book while it waits is one request")
+    func duplicatePendingIgnored() {
+        var queue = PresentationQueue()
+        let book = makeBook()
+        queue.enqueue(.importPicker)
+        queue.enqueue(.rename(book))
+        queue.enqueue(.rename(book))
+        #expect(queue.pending == [.rename(book)])
+    }
+
+    @Test("renames of different Books are different requests")
+    func differentBooksNotConfused() {
+        var queue = PresentationQueue()
+        let first = makeBook(title: "First")
+        let second = makeBook(title: "Second")
+        queue.enqueue(.rename(first))
+        queue.enqueue(.rename(second))
+        #expect(queue.current == .rename(first))
+        #expect(queue.pending == [.rename(second)])
     }
 }

@@ -105,7 +105,9 @@ screen, so a second dialog can never be requested while one is showing.
 - `struct PresentationQueue`: `private(set) var current: Presentation?`,
   `private(set) var pending: [Presentation]`.
   - `mutating func enqueue(_ p: Presentation)`: if `current` is nil, it
-    becomes current; otherwise it is appended. Nothing is filtered.
+    becomes current; otherwise it is appended. A request whose id is
+    already current or pending is ignored (the same request twice is one
+    request).
   - `mutating func dismissed(_ id: Presentation.ID)`: if `id` is the
     current one, clears it and promotes the first pending item (if any).
     A stale id is ignored.

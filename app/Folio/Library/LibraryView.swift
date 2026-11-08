@@ -78,19 +78,27 @@ struct LibraryView: View {
                 .onChange(of: horizontalSizeClass) {
                     if horizontalSizeClass != .regular { endSelecting() }
                 }
-                .alert(
-                    Text("Delete \(selectionToDelete?.count ?? 0) Books?"),
-                    isPresented: isPresenting {
-                        if case .deleteSelection = $0 { true } else { false }
-                    },
-                    presenting: selectionToDelete
-                ) { ids in
-                    Button("Delete", role: .destructive) { deleteSelection(ids) }
-                    Button("Cancel", role: .cancel) {}
-                } message: { _ in
-                    Text("Their pages will be removed from Folio.")
-                }
             #endif
+            .background { dialogHost }
+            .onChange(of: model.presentedNotice?.id, initial: true) { requestPresentedNotice() }
+            .onAppear {
+                Task { await model.reload() }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    Task { await model.reload() }
+                }
+            }
+    }
+
+    /// Carries every dialog modifier. Keyed by the current Presentation's id,
+    /// so each Presentation gets a fresh view: SwiftUI documents that a view
+    /// whose `.id` changes is a new view, so it sees a new presentation
+    /// request rather than a changed one. Without it, a Notice promoted in the
+    /// same update as the one before it would leave `isPresented` true with
+    /// only the presented value changed, and SwiftUI might never show it.
+    private var dialogHost: some View {
+        Color.clear
             .fileImporter(
                 isPresented: isPresenting { $0 == .importPicker },
                 allowedContentTypes: [.folder, .zip],
@@ -132,18 +140,21 @@ struct LibraryView: View {
             } message: { notice in
                 Text(notice.message)
             }
-            .onChange(of: model.presentedNotice?.id, initial: true) { requestPresentedNotice() }
-            .onChange(of: queue.current?.id) {
-                if case .rename(let book) = queue.current { renameTitle = book.title }
-            }
-            .onAppear {
-                Task { await model.reload() }
-            }
-            .onChange(of: scenePhase) { _, phase in
-                if phase == .active {
-                    Task { await model.reload() }
+            #if os(iOS)
+                .alert(
+                    Text("Delete \(selectionToDelete?.count ?? 0) Books?"),
+                    isPresented: isPresenting {
+                        if case .deleteSelection = $0 { true } else { false }
+                    },
+                    presenting: selectionToDelete
+                ) { ids in
+                    Button("Delete", role: .destructive) { deleteSelection(ids) }
+                    Button("Cancel", role: .cancel) {}
+                } message: { _ in
+                    Text("Their pages will be removed from Folio.")
                 }
-            }
+            #endif
+            .id(queue.current?.id)
     }
 
     @ViewBuilder private var content: some View {
@@ -338,6 +349,7 @@ struct LibraryView: View {
     /// The one way to ask for a dialog: it shows now if none is on screen,
     /// otherwise after every dialog asked for before it.
     private func request(_ presentation: Presentation) {
+        if case .rename(let book) = presentation { renameTitle = book.title }
         queue.enqueue(presentation)
     }
 
