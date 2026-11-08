@@ -26,7 +26,8 @@ public actor Library {
     private var cancelledWhileQueued: Set<ImportID> = []
     /// Imports whose Failed status could not be saved. Storage may still show one as
     /// Queued, so the scheduler skips it for the rest of this session rather than
-    /// running it again at once and failing the same way. Cleared on retry.
+    /// running it again at once and failing the same way. Cleared only at relaunch:
+    /// retry needs a Failed Import, and these were never saved as Failed.
     private var unsavedFailures: Set<ImportID> = []
 
     public init(
@@ -143,7 +144,6 @@ public actor Library {
                 return
             }
             cancelledWhileQueued.remove(id)
-            unsavedFailures.remove(id)
             record.status = .queued
             record.pagesDone = 0
             record.pagesTotal = nil
