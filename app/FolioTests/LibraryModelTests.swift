@@ -456,7 +456,7 @@ import UniformTypeIdentifiers
         #expect(fixture.model.notices.isEmpty)
     }
 
-    @Test("pageURL joins the Books directory, folder, and Page file name")
+    @Test("pageURL joins the Books directory, folder, pages folder, and Page file name")
     func pageURL() throws {
         let fixture = try makeFixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -465,7 +465,7 @@ import UniformTypeIdentifiers
         #expect(
             fixture.model.pageURL(for: book, at: 1)
                 == fixture.booksDirectory.appending(path: book.folderName)
-                .appending(path: "0002.png"))
+                .appending(path: "pages").appending(path: "0002.png"))
     }
 
     @Test("removeBooks removes every Book it is given")

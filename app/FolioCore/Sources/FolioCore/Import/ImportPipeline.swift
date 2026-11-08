@@ -13,7 +13,8 @@ public struct ImportPipeline: Sendable {
     /// The folder under the system temporary directory used when no item-replacement
     /// directory can be had for the Books directory's volume.
     static let fallbackStagingName = "FolioImport"
-    private static let pagesName = "pages"
+    /// The folder inside a Book's folder that holds its Pages, named by `Page.fileName`.
+    public static let pagesName = "pages"
     private static let expandedName = "expanded"
 
     let booksDirectory: URL

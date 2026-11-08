@@ -88,6 +88,7 @@
     "Not downloaded to this device" : {},
     "Not enough storage" : {},
     "OK" : {},
+    "Page %lld could not be shown" : {},
     "Page %lld of %lld" : {
       "localizations" : {
         "en" : {

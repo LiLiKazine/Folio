@@ -77,10 +77,31 @@ double-click or Return, with no File menu item in this slice.
   the opened Book is first in the grid. **Still to check:** Mac (⌘I, drop,
   double-click and Return to open, Rename, Delete) and the iPad multi-delete
   ending select mode. Computer use was not available in the session when the
-  Mac check was attempted.
+  Mac check was attempted. The owner then ran the Task 3 manual check by hand
+  and reported "manually tested, and passed"; they did not itemise which
+  checks, so the Mac and iPad items are recorded as passed on that report.
 - The Mac "On My iPhone" folder of the iOS simulator is
   `group.com.apple.FileProvider.LocalStorage`, not the iCloud Drive container;
   Sources for manual checks go under its `File Provider Storage` folder.
+- Task 5 manual check, iPhone simulator (iPhone 18 Pro), all passed: a Book
+  opens on its Reading Position (Page 6 after Page 6 was left, across a
+  relaunch with the Book still open: the Library shows, the card reads
+  "Page 6 of 12" and the Book is first); swipe past the last Page does
+  nothing; the slider jumps; a text file named `.png` shows the placeholder,
+  counts as "Page 2 of 3", and the position moves onto it; double-tap and
+  pinch zoom about the centre; a zoomed Page pans, and a swipe at its edge
+  turns the Page (the hand-off needs no UIKit); the system back swipe from the
+  left edge turns a Page instead of leaving; a one-Page Book reads "Page 1 of
+  1" with the slider disabled and swipes doing nothing; Close returns and the
+  card reads "Page 5 of 12" in first place. **Not checked by the builder:**
+  the Mac screen (arrow keys, Escape, trackpad swipe, zoom hand-off) and the
+  iPad; computer use was not available.
+- The design and plan said a Page file is at `<folder>/<file name>`. It is at
+  `<folder>/pages/<file name>`; every Page showed the placeholder until
+  `pageURL` used `ImportPipeline.pagesName`.
+- The scroll view does not keep a zoomed Page centred on its own; it needs
+  `defaultScrollAnchor(.center, for: .sizeChanges)` as well as the initial
+  anchor.
 
 ## Commits
 
@@ -92,3 +113,4 @@ double-click or Return, with no File menu item in this slice.
 | (task 2) | feat(library): open regardless; turnPage and open record are log-only |
 | (task 3) | refactor(library): LibraryWindow owns the navigation path and every dialog |
 | (task 4) | feat(reading): decode Pages downsampled, cache the current Page and its neighbours |
+| (task 5) | feat(reading): open a Book and turn its Pages |

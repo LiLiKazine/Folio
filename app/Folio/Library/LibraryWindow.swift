@@ -28,7 +28,7 @@ struct LibraryWindow: View {
         NavigationStack(path: $path) {
             LibraryView(model: model, request: request, open: open)
                 .navigationDestination(for: Book.self) { book in
-                    Text(book.title)
+                    ReadingView(book: book, model: model) { _ = path.popLast() }
                 }
         }
         .safeAreaInset(edge: .top, spacing: 0) {

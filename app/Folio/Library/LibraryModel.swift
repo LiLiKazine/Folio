@@ -186,9 +186,11 @@ import Observation
         booksDirectory.appending(path: book.folderName).appending(path: book.coverFileName)
     }
 
-    /// The file holding the Page at `index` of `book`.
+    /// The file holding the Page at `index` of `book`: `<folder>/pages/<file name>`.
     func pageURL(for book: Book, at index: Int) -> URL {
-        booksDirectory.appending(path: book.folderName).appending(path: book.pages[index].fileName)
+        booksDirectory.appending(path: book.folderName)
+            .appending(path: ImportPipeline.pagesName, directoryHint: .isDirectory)
+            .appending(path: book.pages[index].fileName)
     }
 
     // MARK: - Private
