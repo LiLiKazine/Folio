@@ -105,8 +105,7 @@ screen, so a second dialog can never be requested while one is showing.
 - `struct PresentationQueue`: `private(set) var current: Presentation?`,
   `private(set) var pending: [Presentation]`.
   - `mutating func enqueue(_ p: Presentation)`: if `current` is nil, it
-    becomes current; otherwise it is appended. A picker request is ignored
-    if a picker is already current or pending (one picker at a time).
+    becomes current; otherwise it is appended. Nothing is filtered.
   - `mutating func dismissed(_ id: Presentation.ID)`: if `id` is the
     current one, clears it and promotes the first pending item (if any).
     A stale id is ignored.
@@ -140,22 +139,25 @@ screen, so a second dialog can never be requested while one is showing.
   Notice. Nothing is skipped.
 - `LibraryCommands` (⌘I) and the drop target request the picker through
   the same `enqueue(.importPicker)` (drop still imports directly).
-- The DEBUG hook `FOLIO_DEBUG_NOTICES` gains `=sequence`: 1 s after launch
-  it enqueues Notice, picker request, Notice. The manual check confirms
-  the three appear one after another on Mac, iPhone, and iPad, with no
-  action other than closing each. If a later one does not appear, that is
-  a finding to report, not something to paper over.
+- The DEBUG hook `FOLIO_DEBUG_NOTICES` and the `handledEventCount` test
+  seam in `LibraryModel` are removed: test scaffolding does not belong in
+  the app. The manual check is the owner's own sequence on each platform.
+  If a later dialog does not appear, that is a finding to report, not
+  something to paper over.
 
 ## Tests
 
 - `PresentationQueueTests` (pure): enqueue when idle → current; enqueue
   when busy → pending in order; `dismissed` promotes the next; stale
-  `dismissed` ignored; second picker ignored while one is current or
-  pending; mixed sequence (Notice, picker, Rename, Notice) in order.
+  `dismissed` ignored; mixed sequence (Notice, picker, Rename, Notice) in
+  order.
+- `LibraryModelTests` that waited on `handledEventCount` observe real state
+  (items, notices) instead.
 - `LibraryModelTests`: background Notices carry `kind: .status`; action
   Notices carry `kind: .dialog`; everything else unchanged.
-- Manual verification as above, plus the owner's own sequence (⌘I while a
-  Notice is showing, close it, picker appears).
+- Manual verification by the owner on Mac, iPhone, and iPad: ⌘I (or the
+  plus button) while a Notice is showing, close the Notice, the picker
+  appears; two Notices in a row appear one after the other.
 
 ## Left to the builder
 
