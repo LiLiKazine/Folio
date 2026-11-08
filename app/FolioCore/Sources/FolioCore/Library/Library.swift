@@ -23,6 +23,9 @@ public actor Library {
     private var queueChanged = false
     /// The Import the scheduler has taken, kept current with its progress.
     private var running: Import?
+    /// Imports cancelled while Queued. A queue fetch that was in flight during the
+    /// cancel can still hand one to the scheduler, which must skip it. Cleared on retry.
+    private var cancelledWhileQueued: Set<ImportID> = []
 
     public init(
         books: any BookRepository, imports: any ImportRepository,
@@ -39,18 +42,24 @@ public actor Library {
         self.booksDirectory = pipeline.booksDirectory
     }
 
-    /// Deletes staging, returns In Progress Imports to Queued, removes Book records without folders and folders without records, then starts the scheduler.
+    /// Deletes staging, removes Book records without folders and folders without records,
+    /// returns In Progress Imports to Queued (or Completed when their Book was already
+    /// added), then starts the scheduler.
     public func start() async throws {
         try fileManager.createDirectory(
             at: pipeline.stagingRoot, withIntermediateDirectories: true)
         try pipeline.removeAllStaging()
+        try await reconcileBookFolders()
         for var record in try await imports.imports(status: .inProgress) {
+            if let book = try await addedBook(for: record) {
+                try await complete(record, with: book)
+                continue
+            }
             record.status = .queued
             record.pagesDone = 0
             record.pagesTotal = nil
             try await imports.update(record)
         }
-        try await reconcileBookFolders()
         kick()
     }
 
@@ -80,7 +89,13 @@ public actor Library {
         if running?.id == id {
             scheduler?.cancel()
         } else if record.status == .queued {
-            try await fail(record, reason: .cancelled)
+            cancelledWhileQueued.insert(id)
+            do {
+                try await fail(record, reason: .cancelled)
+            } catch {
+                cancelledWhileQueued.remove(id)
+                throw error
+            }
         } else {
             throw LibraryError.invalidStatus
         }
@@ -89,6 +104,11 @@ public actor Library {
     public func retryImport(id: ImportID) async throws {
         var record = try await importRecord(id: id)
         guard record.status == .failed else { throw LibraryError.invalidStatus }
+        if let book = try await addedBook(for: record) {
+            try await complete(record, with: book)
+            return
+        }
+        cancelledWhileQueued.remove(id)
         record.status = .queued
         record.pagesDone = 0
         record.pagesTotal = nil
@@ -148,6 +168,13 @@ public actor Library {
         return book
     }
 
+    /// The Book an earlier run of `record` already added, if it got that far before
+    /// the Import could be marked Completed.
+    private func addedBook(for record: Import) async throws -> Book? {
+        guard let bookID = record.bookID else { return nil }
+        return try await books.book(id: bookID)
+    }
+
     // MARK: - Launch reconciliation
 
     /// Only folders named by a UUID are Book folders; anything else is left alone.
@@ -182,7 +209,15 @@ public actor Library {
     private func runQueue() async {
         while !Task.isCancelled {
             queueChanged = false
-            guard let next = try? await imports.imports(status: .queued).first else {
+            let queued: [Import]
+            do {
+                queued = try await imports.imports(status: .queued)
+            } catch {
+                LibraryLog.logger.error(
+                    "Could not read Queued Imports: \(String(describing: error), privacy: .public)")
+                break
+            }
+            guard let next = queued.first(where: { !cancelledWhileQueued.contains($0.id) }) else {
                 if queueChanged { continue }
                 break
             }
@@ -195,12 +230,15 @@ public actor Library {
     private func run(_ queued: Import) async {
         var record = queued
         record.status = .inProgress
+        // A fresh id each run: a folder left by an earlier run under the old id
+        // would block the pipeline's final move.
+        let bookID = BookID()
+        record.bookID = bookID
         running = record
         defer { running = nil }
         do {
             try Task.checkCancellation()
             try await imports.update(record)
-            let bookID = BookID()
             let book = try await sourceAccess.withAccess(to: record.sourceBookmark) {
                 [pipeline, now, title = record.title] source in
                 try await pipeline.run(
@@ -210,14 +248,34 @@ public actor Library {
                 }
             }
             try await books.add(book)
-            record = running ?? record
-            record.status = .completed
-            record.bookID = book.id
-            record.finishedAt = now()
-            try await imports.update(record)
-            continuation.yield(.importCompleted(record.id, book))
+            try await complete(running ?? record, with: book)
         } catch {
-            try? await fail(running ?? record, reason: Self.failureReason(for: error))
+            await recordFailure(running ?? record, reason: Self.failureReason(for: error))
+        }
+    }
+
+    private func complete(_ record: Import, with book: Book) async throws {
+        var record = record
+        record.status = .completed
+        record.bookID = book.id
+        record.finishedAt = now()
+        try await imports.update(record)
+        continuation.yield(.importCompleted(record.id, book))
+    }
+
+    /// Marks the running Import Failed, retrying the write once. If both writes fail,
+    /// the record stays In Progress and returns to Queued at next launch.
+    private func recordFailure(_ record: Import, reason: ImportFailureReason) async {
+        do {
+            try await fail(record, reason: reason)
+        } catch {
+            do {
+                try await fail(record, reason: reason)
+            } catch {
+                LibraryLog.logger.error(
+                    "Could not record Import \(record.id.rawValue.uuidString, privacy: .public) as Failed: \(String(describing: error), privacy: .public)"
+                )
+            }
         }
     }
 

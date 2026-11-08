@@ -84,3 +84,14 @@ non-Completed Imports); domain events tell the screen when to refresh.
   marked Failed underneath it.
 - Launch reconciliation only touches UUID-named folders in the Books
   directory, so the SwiftData store living there is left alone.
+- Review fix: the Import gets its Book id when it goes In Progress, before the
+  pipeline runs. A Book added before a crash or a failed Completed write is then
+  recognised at launch or on retry and the Import is marked Completed instead of
+  importing a second Book. Reconciliation now runs before recovery so a Book
+  record without a folder is dropped first.
+- Review fix: a queue fetch already in flight when a Queued Import is cancelled
+  can still return it; the actor keeps `cancelledWhileQueued` and the scheduler
+  skips those ids (cleared on retry). A re-read before running was rejected
+  because it relies on the repository processing writes in call order.
+- Repository failures on the scheduler's queue fetch and on recording a failure
+  (after one retry) are logged through `LibraryLog` (OSLog, category "library").

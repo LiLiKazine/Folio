@@ -23,17 +23,56 @@ struct LibraryTests {
         }
     }
 
+    /// Import repository that can hold one Queued fetch after reading it, so a test can
+    /// act in the gap between the scheduler's fetch and its use of the result.
+    private actor HeldQueueImportRepository: ImportRepository {
+        private let base = InMemoryImportRepository()
+        private var holdNextQueuedFetch = false
+        let fetched: AsyncStream<Void>
+        private let fetchedContinuation: AsyncStream<Void>.Continuation
+        private let released: AsyncStream<Void>
+        private let releasedContinuation: AsyncStream<Void>.Continuation
+
+        init() {
+            (fetched, fetchedContinuation) = AsyncStream.makeStream(of: Void.self)
+            (released, releasedContinuation) = AsyncStream.makeStream(of: Void.self)
+        }
+
+        func holdNextQueuedFetch(_ hold: Bool) { holdNextQueuedFetch = hold }
+
+        nonisolated func release() { releasedContinuation.yield() }
+
+        func imports(status: ImportStatus) async throws -> [Import] {
+            let result = try await base.imports(status: status)
+            if status == .queued, holdNextQueuedFetch {
+                holdNextQueuedFetch = false
+                fetchedContinuation.yield()
+                for await _ in released { break }
+            }
+            return result
+        }
+
+        func importRecord(id: ImportID) async throws -> Import? {
+            try await base.importRecord(id: id)
+        }
+        func add(_ record: Import) async throws { try await base.add(record) }
+        func update(_ record: Import) async throws { try await base.update(record) }
+        func remove(id: ImportID) async throws { try await base.remove(id: id) }
+    }
+
     private struct Fixture {
         let directory: TemporaryDirectory
         let booksDirectory: URL
         let books = InMemoryBookRepository()
-        let imports = InMemoryImportRepository()
+        let imports: any ImportRepository
         let library: Library
 
         init(
             sourceAccess: any SourceAccess = InMemorySourceAccess(),
+            imports: any ImportRepository = InMemoryImportRepository(),
             now: @escaping @Sendable () -> Date = { .now }
         ) throws {
+            self.imports = imports
             directory = try TemporaryDirectory()
             booksDirectory = directory.url.appending(path: "Books", directoryHint: .isDirectory)
             library = Library(
@@ -212,7 +251,8 @@ struct LibraryTests {
         #expect(failed.status == .failed)
         #expect(failed.failureReason == .noImagesFound)
         #expect(failed.finishedAt != nil)
-        #expect(failed.bookID == nil)
+        let bookID = try #require(failed.bookID)
+        #expect(try await fixture.books.book(id: bookID) == nil)
         #expect(try await fixture.library.items() == [.importRecord(failed)])
         #expect(try fixture.booksDirectoryContents() == [])
     }
@@ -282,6 +322,40 @@ struct LibraryTests {
         await #expect(throws: LibraryError.invalidStatus) {
             try await fixture.library.cancelImport(id: queued.id)
         }
+    }
+
+    @Test("cancel while Queued wins over a scheduler fetch already in flight")
+    func cancelQueuedRace() async throws {
+        let access = InMemorySourceAccess()
+        let repository = HeldQueueImportRepository()
+        let fixture = try Fixture(sourceAccess: access, imports: repository)
+        defer { fixture.directory.remove() }
+        let source = try fixture.folderSource()
+        let queued = Self.importRecord(
+            status: .queued, createdAt: .now, bookmark: try access.bookmark(for: source))
+        try await repository.add(queued)
+        await repository.holdNextQueuedFetch(true)
+
+        try await fixture.library.start()
+        try await Self.withTimeout {
+            for await _ in repository.fetched { return }
+            throw EventTimeout()
+        }
+        try await fixture.library.cancelImport(id: queued.id)
+        repository.release()
+        let later = try await fixture.library.createImport(from: source)
+        let events = try await fixture.events(
+            until: { if case .importCompleted(later, _) = $0 { true } else { false } })
+
+        #expect(events.first == .importFailed(queued.id, sourceName: "Source", reason: .cancelled))
+        #expect(
+            !events.contains {
+                if case .importStarted(queued.id, _) = $0 { true } else { false }
+            })
+        let record = try #require(try await repository.importRecord(id: queued.id))
+        #expect(record.status == .failed)
+        #expect(record.failureReason == .cancelled)
+        #expect(try await fixture.books.allBooks().count == 1)
     }
 
     @Test("removeImport only works on Failed")
@@ -382,6 +456,46 @@ struct LibraryTests {
         #expect(id == interrupted.id)
         #expect(try await fixture.imports.importRecord(id: id)?.status == .completed)
         #expect(try fixture.booksDirectoryContents() == [book.folderName])
+    }
+
+    @Test("start completes an In Progress Import whose Book was already added")
+    func recoveryWithBook() async throws {
+        let fixture = try Fixture()
+        defer { fixture.directory.remove() }
+        let book = Self.book(importedAt: .now)
+        try fixture.directory.file("Books/\(book.folderName)/pages/0001.png")
+        try await fixture.books.add(book)
+        var interrupted = Self.importRecord(status: .inProgress, createdAt: .now)
+        interrupted.bookID = book.id
+        try await fixture.imports.add(interrupted)
+
+        try await fixture.library.start()
+        let events = try await fixture.events(until: Self.isCompleted)
+
+        #expect(events == [.importCompleted(interrupted.id, book)])
+        let record = try #require(try await fixture.imports.importRecord(id: interrupted.id))
+        #expect(record.status == .completed)
+        #expect(record.bookID == book.id)
+        #expect(record.finishedAt != nil)
+        #expect(try await fixture.books.allBooks() == [book])
+    }
+
+    @Test("retry completes a Failed Import whose Book was already added")
+    func retryWithBook() async throws {
+        let fixture = try Fixture()
+        defer { fixture.directory.remove() }
+        let book = Self.book(importedAt: .now)
+        try await fixture.books.add(book)
+        var failed = Self.importRecord(status: .failed, createdAt: .now)
+        failed.bookID = book.id
+        try await fixture.imports.add(failed)
+
+        try await fixture.library.retryImport(id: failed.id)
+        let events = try await fixture.events(until: Self.isCompleted)
+
+        #expect(events == [.importCompleted(failed.id, book)])
+        #expect(try await fixture.imports.importRecord(id: failed.id)?.status == .completed)
+        #expect(try await fixture.books.allBooks() == [book])
     }
 
     @Test("start removes Book records without folders and folders without records")
