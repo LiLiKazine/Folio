@@ -1,6 +1,6 @@
 # Folio
 
-A local-first comic reader for folders and zips of page images, fully offline on iPhone, iPad, and Mac.
+A local-first reader for folders and zips of images (comics, manga, scanned books, photo sets), fully offline on iPhone, iPad, and Mac.
 
 ## Requirements
 

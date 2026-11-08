@@ -1,8 +1,17 @@
 # Folio
 
-A local-first comic reader for folders and zips of page images, fully offline on iPhone, iPad, and Mac.
+A local-first reader for folders and zips of images (comics, manga, scanned books, photo sets), fully offline on iPhone, iPad, and Mac.
 
-For: People who already have comics downloaded on their Apple devices and want to read them without any network or account.
+For: People who already have comics or other image sets downloaded on their Apple devices and want to read them without any network or account.
+
+## Glossary first
+
+`CONTEXT.md` is the project's ubiquitous language. In designs, code, tests,
+commit messages, and UI copy, use its terms exactly (Library, Book, Page,
+Source, Import, Title, Cover, Reading Position) and never the words listed
+under _Avoid_. Introducing a new domain concept, or changing the meaning of an
+existing one, requires confirming with the project owner first; once agreed,
+add it to `CONTEXT.md` before using it anywhere else.
 
 ## Architecture
 
@@ -83,6 +92,7 @@ launching and screenshotting a simulator or app window is unreliable.
 
 ## Documentation
 
+- `CONTEXT.md` — the glossary; the only source of domain terms
 - `DECISIONS.md` — why the project is set up this way
 - `docs/superpowers/specs/` — feature designs
 - `docs/logs/` — decision logs from `structured-commit`
