@@ -62,14 +62,21 @@ public struct ImportPipeline: Sendable {
         }
     }
 
-    /// Deletes every folder under `.staging`.
+    /// Deletes every folder under `.staging`. An item that cannot be deleted does not
+    /// stop the rest; the first such error is thrown once all have been tried.
     public func removeAllStaging() throws {
         guard fileManager.fileExists(atPath: stagingRoot.path) else { return }
+        var firstError: (any Error)?
         for item in try fileManager.contentsOfDirectory(
             at: stagingRoot, includingPropertiesForKeys: nil)
         {
-            try fileManager.removeItem(at: item)
+            do {
+                try fileManager.removeItem(at: item)
+            } catch {
+                firstError = firstError ?? error
+            }
         }
+        if let firstError { throw firstError }
     }
 
     /// Checks storage, then fills `<staging>/pages` with the Source's Pages under their new names.

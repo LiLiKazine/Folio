@@ -44,23 +44,28 @@ public actor Library {
 
     /// Deletes staging, removes Book records without folders and folders without records,
     /// returns In Progress Imports to Queued (or Completed when their Book was already
-    /// added), then starts the scheduler.
+    /// added), then starts the scheduler. Cleanup is best-effort: a step that fails is
+    /// logged and skipped, so recovery and the scheduler always run. Throws only when
+    /// the In Progress Imports cannot be read, after starting the scheduler anyway.
     public func start() async throws {
-        try fileManager.createDirectory(
-            at: pipeline.stagingRoot, withIntermediateDirectories: true)
-        try pipeline.removeAllStaging()
-        try await reconcileBookFolders()
+        defer { kick() }
+        removeStaging()
+        await reconcileBookFolders()
         for var record in try await imports.imports(status: .inProgress) {
-            if let book = try await addedBook(for: record) {
-                try await complete(record, with: book)
-                continue
+            do {
+                if let book = try await addedBook(for: record) {
+                    try await complete(record, with: book)
+                    continue
+                }
+                record.status = .queued
+                record.pagesDone = 0
+                record.pagesTotal = nil
+                try await imports.update(record)
+            } catch {
+                Self.logCleanupFailure(
+                    "recover Import \(record.id.rawValue.uuidString)", error: error)
             }
-            record.status = .queued
-            record.pagesDone = 0
-            record.pagesTotal = nil
-            try await imports.update(record)
         }
-        kick()
     }
 
     public func items() async throws -> [LibraryItem] {
@@ -177,23 +182,61 @@ public actor Library {
 
     // MARK: - Launch reconciliation
 
+    private func removeStaging() {
+        do {
+            try fileManager.createDirectory(
+                at: pipeline.stagingRoot, withIntermediateDirectories: true)
+        } catch {
+            Self.logCleanupFailure("create staging", error: error)
+        }
+        do {
+            try pipeline.removeAllStaging()
+        } catch {
+            Self.logCleanupFailure("remove staging", error: error)
+        }
+    }
+
     /// Only folders named by a UUID are Book folders; anything else is left alone.
-    private func reconcileBookFolders() async throws {
-        let folders = Set(
-            try fileManager.contentsOfDirectory(atPath: booksDirectory.path).filter {
-                UUID(uuidString: $0) != nil
-            })
+    /// Each record and folder is handled on its own, so one failure skips only itself.
+    private func reconcileBookFolders() async {
+        let folders: Set<String>
+        let allBooks: [Book]
+        do {
+            folders = Set(
+                try fileManager.contentsOfDirectory(atPath: booksDirectory.path).filter {
+                    UUID(uuidString: $0) != nil
+                })
+            allBooks = try await books.allBooks()
+        } catch {
+            Self.logCleanupFailure("reconcile Book folders", error: error)
+            return
+        }
         var recorded: Set<String> = []
-        for book in try await books.allBooks() {
+        for book in allBooks {
             if folders.contains(book.folderName) {
                 recorded.insert(book.folderName)
-            } else {
+                continue
+            }
+            do {
                 try await books.remove(id: book.id)
+            } catch {
+                Self.logCleanupFailure(
+                    "remove Book \(book.id.rawValue.uuidString) without folder", error: error)
             }
         }
         for orphan in folders.subtracting(recorded) {
-            try fileManager.removeItem(at: booksDirectory.appending(path: orphan))
+            do {
+                try fileManager.removeItem(at: booksDirectory.appending(path: orphan))
+            } catch {
+                Self.logCleanupFailure("remove orphan folder \(orphan)", error: error)
+            }
         }
+    }
+
+    private static func logCleanupFailure(_ step: String, error: any Error) {
+        LibraryLog.logger.error(
+            "Launch cleanup could not \(step, privacy: .public): \(String(describing: error), privacy: .public)"
+        )
     }
 
     // MARK: - Scheduler

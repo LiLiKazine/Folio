@@ -520,6 +520,47 @@ struct LibraryTests {
                 == ["Library.store", "Notes", kept.folderName].sorted())
     }
 
+    @Test("start still recovers In Progress Imports when cleanup cannot delete something")
+    func recoveryAfterCleanupFailure() async throws {
+        let access = InMemorySourceAccess()
+        let fixture = try Fixture(sourceAccess: access)
+        let source = try fixture.folderSource()
+        let interrupted = Self.importRecord(
+            status: .inProgress, createdAt: .now, bookmark: try access.bookmark(for: source))
+        try await fixture.imports.add(interrupted)
+        // Folders whose contents cannot be deleted: a staged run and an orphan Book folder.
+        let stagedFolder = ".staging/\(UUID().uuidString)"
+        let orphanFolder = UUID().uuidString
+        let locked = try [stagedFolder, orphanFolder].map { folder in
+            try fixture.directory.file("Books/\(folder)/pages/0001.png")
+                .deletingLastPathComponent()
+        }
+        for folder in locked {
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o555], ofItemAtPath: folder.path)
+        }
+        defer {
+            for folder in locked {
+                try? FileManager.default.setAttributes(
+                    [.posixPermissions: 0o755], ofItemAtPath: folder.path)
+            }
+            fixture.directory.remove()
+        }
+
+        try await fixture.library.start()
+        let events = try await fixture.events(until: Self.isCompleted)
+
+        guard case .importCompleted(let id, let book) = events.last else {
+            Issue.record("no importCompleted in \(events)")
+            return
+        }
+        #expect(id == interrupted.id)
+        #expect(try await fixture.imports.importRecord(id: id)?.status == .completed)
+        #expect(
+            try fixture.booksDirectoryContents()
+                == [stagedFolder, orphanFolder, book.folderName].sorted())
+    }
+
     @Test("items are ordered In Progress, Queued, Failed, then Books")
     func itemOrder() async throws {
         let fixture = try Fixture()
