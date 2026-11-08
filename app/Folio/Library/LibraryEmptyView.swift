@@ -8,7 +8,11 @@ struct LibraryEmptyView: View {
         ContentUnavailableView {
             Label("No Books yet", systemImage: "books.vertical")
         } description: {
-            Text("Import a folder of images, or a zip of one, from Files.")
+            #if os(macOS)
+                Text("Import a folder of images, or a zip of one, from Finder.")
+            #else
+                Text("Import a folder of images, or a zip of one, from Files.")
+            #endif
         } actions: {
             Button("Import a Book", action: onImport)
                 .buttonStyle(.borderedProminent)
