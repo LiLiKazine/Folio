@@ -13,4 +13,7 @@ enum AppLog {
 
     /// The Library screen's model and the operations it sends to the Library.
     static let library = Logger(subsystem: subsystem, category: "library")
+
+    /// The reading screen and the Page decoder.
+    static let reading = Logger(subsystem: subsystem, category: "reading")
 }

@@ -79,3 +79,4 @@ double-click or Return, with no File menu item in this slice.
 | c2a94d9 | docs(plan): implementation plan for reading a Book |
 | d413de0 | feat(library): turnPage moves a Book's Reading Position |
 | (task 2) | feat(library): open regardless; turnPage and open record are log-only |
+| (task 4) | feat(reading): decode Pages downsampled, cache the current Page and its neighbours |
