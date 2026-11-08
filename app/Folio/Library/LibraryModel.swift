@@ -13,7 +13,9 @@ import Observation
     private(set) var liveProgress: [ImportID: (done: Int, total: Int)] = [:]
     /// Failures not yet dismissed, oldest first.
     private(set) var notices: [Notice] = []
-    var isLoaded = false
+    /// True once `start()` has loaded the items for the first time; until then
+    /// `reload()` does nothing.
+    private(set) var isLoaded = false
     /// Events fully handled by `start()`; lets tests wait for an event that changes no state.
     private(set) var handledEventCount = 0
 
@@ -33,7 +35,7 @@ import Observation
     func start() async {
         do {
             try await library.start()
-            await reload()
+            await loadItems()
         } catch {
             AppLog.library.error(
                 "Could not start the Library: \(String(describing: error), privacy: .public)")
@@ -49,9 +51,16 @@ import Observation
         }
     }
 
-    /// Reloads the items. A failure has no action of the user's behind it, so it
-    /// queues the Update the Library Notice that says what they see may be out of date.
+    /// Reloads the items once `start()` has loaded them; before that it does nothing,
+    /// so a reload when the screen appears cannot race the Library's launch step.
     func reload() async {
+        guard isLoaded else { return }
+        await loadItems()
+    }
+
+    /// Loads the items. A failure has no action of the user's behind it, so it queues
+    /// the Update the Library Notice that says what they see may be out of date.
+    private func loadItems() async {
         do {
             items = try await library.items()
         } catch {

@@ -253,6 +253,14 @@ for the rest of the session. Now the Notice waits in the queue and appears
 what they were doing, and the Notice follows. This was checked by hand with
 the file picker on the Mac and on an iPhone simulator.
 
+**The Library screen does not refresh itself until launch has finished.** The
+screen asks for a fresh list of Books and Imports whenever it appears or the app
+comes back to the front. At launch that request could arrive while the
+Library was still tidying up, and with a broken store the user saw "Couldn't
+Update the Library", then "Couldn't Open the Library", then the first again.
+Now those requests do nothing until the Library has finished launching and
+loaded the list once; launch itself reports any failure, once.
+
 **The Library's launch step (`start()`) keeps its typed throw.** The plan said
 it would stop throwing and announce an event instead. Task 1 had already made
 it throw `.storage(.openLibrary)` when the in-progress Imports cannot be read,

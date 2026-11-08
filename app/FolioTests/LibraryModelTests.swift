@@ -73,6 +73,28 @@ import UniformTypeIdentifiers
         }
     }
 
+    /// Import storage whose read of In Progress Imports waits for `gate`, so
+    /// `Library.start()` stays in flight until the test opens it.
+    private actor GatedImportRepository: ImportRepository {
+        private let base = InMemoryImportRepository()
+        let gate: Gate
+
+        init(gate: Gate) { self.gate = gate }
+
+        func imports(status: ImportStatus) async throws -> [Import] {
+            if status == .inProgress { try await gate.wait() }
+            return try await base.imports(status: status)
+        }
+
+        func importRecord(id: ImportID) async throws -> Import? {
+            try await base.importRecord(id: id)
+        }
+
+        func add(_ record: Import) async throws { try await base.add(record) }
+        func update(_ record: Import) async throws { try await base.update(record) }
+        func remove(id: ImportID) async throws { try await base.remove(id: id) }
+    }
+
     private func makeFixture(
         books: any BookRepository = InMemoryBookRepository(),
         imports: any ImportRepository = InMemoryImportRepository(),
@@ -607,6 +629,33 @@ import UniformTypeIdentifiers
                     "Folio couldn't save the change. What you see may be out of date; relaunch Folio to refresh.",
                 ],
             ])
+    }
+
+    @Test("reload before start() has loaded does nothing")
+    func reloadBeforeStart() async throws {
+        let gate = Gate()
+        let bookRepository = FailingBookRepository()
+        let bookID = BookID()
+        try await bookRepository.add(
+            Book(
+                id: bookID, title: "Vol 1", folderName: bookID.rawValue.uuidString,
+                pages: [Page(fileName: "0001.png")], coverFileName: CoverImage.fileName,
+                importedAt: .now, lastOpenedAt: nil, readingPosition: nil))
+        let fixture = try makeFixture(
+            books: bookRepository, imports: GatedImportRepository(gate: gate))
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+        let task = Task { await model.start() }
+        defer { task.cancel() }
+
+        // start() is held in the launch step; a reload now would read a broken store.
+        await bookRepository.fail([.allBooks])
+        await model.reload()
+
+        #expect(model.notices.isEmpty)
+        #expect(model.items.isEmpty)
+        #expect(!model.isLoaded)
+        await gate.open()
     }
 
     @Test("a file picker failure queues exactly its Notice") func filePickerFailed() async throws {
