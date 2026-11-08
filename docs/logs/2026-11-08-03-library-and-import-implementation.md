@@ -39,7 +39,8 @@ entitlements) are recorded in `DECISIONS.md`.
 - `.../Library/`: `Library` actor, `LibraryItem`, `LibraryLog`
 - `app/Folio/Persistence/`: SwiftData models and repositories, `LibraryStorage`, `FileSourceAccess`
 - `app/Folio/Library/`: `LibraryModel`, views, Mac commands and drop target, iPad selection bar
-- `app/Config/macOS.entitlements`: bookmark and user-selected read-only entitlements
+- `app/Config/macOS.entitlements`: bookmark and user-selected read-only entitlements; `network.client` removed in the final review
+- `app/Folio/Persistence/FolioSchema.swift`: `FolioSchemaV1` baseline and an empty `FolioMigrationPlan`
 - `CLAUDE.md`, `DECISIONS.md`: architecture, conventions, and decisions for the slice
 
 ## What Was Discovered
@@ -82,6 +83,28 @@ locked; known and accepted.
 Test counts: `FolioCore` 55 tests in 7 suites (run with `-warnings-as-errors`);
 app target 19 tests in 5 suites on macOS.
 
+## Final review fixes
+
+The whole-branch review found three Important issues and several Minor ones,
+fixed one commit each:
+
+| Commit subject | Change |
+|----------------|--------|
+| keep launch recovery running when cleanup fails | `Library.start()` cleanup is best-effort and logged; recovery and the scheduler always run |
+| download every iCloud file in a folder Source before Import | `FileSourceAccess` waits for every file and `.icloud` placeholder in a folder Source (60 s total); `resourceValues` errors become `.unavailable` |
+| show no failure alert for a cancellation the user asked for | `LibraryModel` skips the alert for `.cancelled` |
+| report Source read failures as Source unavailable | read-side copy errors map to `.sourceUnavailable` |
+| keep only regular files as Pages and scope __MACOSX to the Source | scanner drops directories and symlinks; `__MACOSX` checked relative to the Source |
+| remove a Book's record before its folder | a folder left behind is an orphan for launch reconciliation |
+| add a versioned SwiftData schema baseline | `FolioSchemaV1` 1.0.0 with `FolioMigrationPlan` |
+| name Finder, not Files, in the Mac empty state | platform-specific copy |
+| remove the network client entitlement on Mac | no network |
+
+Discovered: `startDownloadingUbiquitousItem` throws at once for a path outside
+iCloud, which makes the placeholder path testable locally; real iCloud Drive
+behaviour was not verified on a device. A read-only folder holding a file is a
+reliable way to make `removeItem` fail in a test.
+
 ## Manual verification still needed
 
 - Mac (unlocked): click a card selects and does not deselect at once; double
@@ -102,15 +125,13 @@ app target 19 tests in 5 suites on macOS.
 - Zip reader: no CRC-32 check, no streaming (entries over 256 MiB are
   rejected), no zip64, extraction has no cancellation point, write failures
   collapse to `unreadable`; CP437 fallback and archive-comment cases untested.
-- Scanner: directories with a Page extension pass the filter, the `__MACOSX`
-  check scans the absolute path, redundant symlink resolution can garble the
-  sort key.
+- Scanner: redundant symlink resolution can garble the sort key.
 - Library actor: `cancelImport` trusts a stale status read and can strand a
   Queued record if its Failed write throws; a cancel arriving after the
   pipeline returns is lost; `createImport` before `start()` runs the scheduler
   before recovery; `Library.swift` is over 300 lines.
-- Source access: refresh and persist stale bookmarks; some Foundation errors
-  surface raw instead of as `SourceAccessError`.
+- Source access: refresh and persist stale bookmarks; iCloud folder downloads
+  need a device check.
 - Pipeline: Cover write failures report `undecodablePage` and ENOSPC during zip
   extraction reports `unreadableZip`; an empty `.staging` folder is left behind.
 - UI: no keyboard way to open a Book on Mac; the drop highlight shows for any
@@ -118,7 +139,8 @@ app target 19 tests in 5 suites on macOS.
   selected accessibility trait on iPad; alert titles can flash a stale count
   while animating out; two reloads at launch; the storage-failure screen is
   plain text; if the first window closes the multi-window story is untested.
-- Tests: SwiftData on-disk container path, iCloud download polling, and
+- Tests: SwiftData on-disk container path, iCloud download polling against a
+  real iCloud item, and
   `liveProgress` updates are untested.
 - `bookID` on an In Progress or Failed Import points at no Book; no code may
   treat it as "has a Book".
