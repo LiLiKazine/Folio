@@ -107,14 +107,21 @@ handled events (`handledEventCount`).
 - App tests (`build/last-test.log`, macOS run): 61 tests in 7 suites passed.
 - `./scripts/verify.sh` (format, build, test, launch on iOS and macOS): green, exit 0.
 
-## Manual verification still needed
+## Manual verification
 
-On Mac, iPhone, and iPad:
+Verified by the owner on the Mac on 2026-11-08 (build 646e84b): ⌘I while a
+Notice is showing, then closing the Notice, opens the file picker; two
+Notices in a row appear one after the other; no dialog appears at launch.
+This is the evidence for the "a freshly created dialog appears when asked"
+behaviour that Apple's documentation does not cover.
 
-- Press ⌘I (Mac) or tap plus (iPhone, iPad) while a Notice is showing, then close the Notice: the file picker appears.
-- Two Notices in a row appear one after the other, each Close removing exactly one.
+Still to check when convenient:
+
+- iPhone and iPad: tap plus while a Notice is showing, then close it: the
+  file picker appears; two Notices in a row.
 - A background failure appears as the status line at the top, not as a dialog.
-- iPad: in Select mode, choose several Books, tap Delete, and confirm: exactly the Books chosen when Delete was tapped are deleted.
+- iPad: in Select mode, choose several Books, tap Delete, and confirm: exactly
+  the Books chosen when Delete was tapped are deleted.
 
 ## Follow-ups
 
