@@ -102,6 +102,18 @@ double-click or Return, with no File menu item in this slice.
 - The scroll view does not keep a zoomed Page centred on its own; it needs
   `defaultScrollAnchor(.center, for: .sizeChanges)` as well as the initial
   anchor.
+- Task 6 manual check, iPhone simulator: with a Book open, an Import that was
+  queued behind a long one failed, and its Notice ("Couldn't Import “Empty”",
+  "No images found") appeared as a dialog over the open Page; OK dismissed it
+  and the Page was still there. The check used a real failing Import. The plan
+  proposed a DEBUG-only hook that queues test Notices (`FOLIO_DEBUG_NOTICES=reading`);
+  it was not added, because DECISIONS.md records that hook as a removed
+  workaround and CLAUDE.md no longer describes it. **Not checked:** the
+  status-line half (a status Notice at the bottom over the Page, then at the
+  top of the Library after Close): no real action produces one on the reading
+  screen without such a hook, and the Mac. The model-level check is the
+  existing "a failing Import queues its Notice" test; the model has no notion
+  of reading, so nothing in it can hold a Notice back.
 
 ## Commits
 
@@ -114,3 +126,4 @@ double-click or Return, with no File menu item in this slice.
 | (task 3) | refactor(library): LibraryWindow owns the navigation path and every dialog |
 | (task 4) | feat(reading): decode Pages downsampled, cache the current Page and its neighbours |
 | (task 5) | feat(reading): open a Book and turn its Pages |
+| (task 6) | docs(reading): record the Notice-over-the-open-Book check |
