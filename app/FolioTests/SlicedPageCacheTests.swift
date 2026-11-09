@@ -21,7 +21,7 @@ struct SlicedPageCacheTests {
 
     private func makeCache(urls: [URL], pageBytes: Int) -> SlicedPageCache {
         SlicedPageCache(
-            urls: urls, screenWidthPixels: 8, perPageBudget: pageBytes, cacheBudget: 2 * pageBytes)
+            urls: urls, widthPixels: 8, perPageBudget: pageBytes, cacheBudget: 2 * pageBytes)
     }
 
     @Test("a Page is decoded once and reused")
@@ -39,28 +39,37 @@ struct SlicedPageCacheTests {
         #expect(await cache.decodeCount == 1)
     }
 
-    @Test("with the top Page retained, prefetch keeps it and the next, and releases the third")
-    func budgetReleasesTheOldestOthers() async throws {
+    @Test(
+        "with the top Page retained, a Page over the budget is kept until the next decode, which releases it"
+    )
+    func nextDecodeReleasesTheOldestOther() async throws {
         let directory = try PNGFixture.makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let (urls, pageBytes) = try makePages(count: 4, in: directory)
         let cache = makeCache(urls: urls, pageBytes: pageBytes)
 
         await cache.retain(top: 0)
-        await cache.prefetch(around: 0)  // decodes Pages 0, 1 and 2 (there is no Page -1)
+        for index in 0...2 { #expect(await cache.slices(at: index) != nil) }
         #expect(await cache.decodeCount == 3)
+        // Page 2 is one Page over the budget, but it is the Page just handed back.
+        #expect(await cache.heldBytes == 3 * pageBytes)
+
+        #expect(await cache.slices(at: 3) != nil)
+        #expect(await cache.decodeCount == 4)
 
         // Pages 0 and 1 were kept: asking for them decodes nothing.
         #expect(await cache.slices(at: 0) != nil)
         #expect(await cache.slices(at: 1) != nil)
-        #expect(await cache.decodeCount == 3)
-
-        // Page 2 did not fit, so it was released and is decoded again.
-        #expect(await cache.slices(at: 2) != nil)
         #expect(await cache.decodeCount == 4)
+
+        // Page 2 was released when Page 3 was decoded, so it is decoded again.
+        #expect(await cache.slices(at: 2) != nil)
+        #expect(await cache.decodeCount == 5)
     }
 
-    @Test("the budget holds after every decode, not only after a prefetch")
+    @Test(
+        "after every decode the cache holds the top Page, the next, and the Page just handed back, nothing more"
+    )
     func budgetHoldsAfterEveryDecode() async throws {
         let directory = try PNGFixture.makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -68,24 +77,24 @@ struct SlicedPageCacheTests {
         let cache = makeCache(urls: urls, pageBytes: pageBytes)
 
         await cache.retain(top: 0)
-        await cache.prefetch(around: 0)
-        #expect(await cache.heldBytes <= 2 * pageBytes)
+        _ = await cache.slices(at: 0)
+        _ = await cache.slices(at: 1)
+        #expect(await cache.heldBytes == 2 * pageBytes)
 
-        // The reader jumps to Page 5. Decoding what a prefetch decodes, one Page at a time,
-        // the Pages held never exceed the budget by more than the Page just returned.
+        // The reader jumps to Page 5, and the strip asks for the Pages around it.
         await cache.retain(top: 5)
-        for index in [5, 6, 7, 4] {
+        #expect(await cache.heldBytes == 2 * pageBytes)
+        for (index, pagesHeld) in [(5, 2), (6, 2), (7, 3), (4, 3)] {
             #expect(await cache.slices(at: index) != nil)
-            #expect(await cache.heldBytes <= 2 * pageBytes + pageBytes)
+            #expect(await cache.heldBytes == pagesHeld * pageBytes, "after Page \(index)")
         }
 
-        // After a whole prefetch the cache holds the top Page and the next, nothing more.
-        await cache.prefetch(around: 5)
-        #expect(await cache.heldBytes == 2 * pageBytes)
+        // Held now: Pages 5 and 6, retained, and Page 4, just handed back; Page 7 went.
         let decodes = await cache.decodeCount
-        #expect(await cache.slices(at: 5) != nil)
-        #expect(await cache.slices(at: 6) != nil)
+        for index in [5, 6, 4] { _ = await cache.slices(at: index) }
         #expect(await cache.decodeCount == decodes)
+        #expect(await cache.slices(at: 7) != nil)
+        #expect(await cache.decodeCount == decodes + 1)
     }
 
     @Test("retain releases the Pages the reader left behind, oldest used first")
@@ -110,13 +119,81 @@ struct SlicedPageCacheTests {
         #expect(await cache.decodeCount == 4)
     }
 
+    @Test("a width change lets go of every Page held, and the next read decodes at the new width")
+    func widthChangeDropsHeldPages() async throws {
+        let directory = try PNGFixture.makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (urls, pageBytes) = try makePages(count: 3, in: directory)
+        let cache = makeCache(urls: urls, pageBytes: pageBytes)
+
+        await cache.retain(top: 0)
+        _ = await cache.slices(at: 0)
+        _ = await cache.slices(at: 1)
+        #expect(await cache.decodeCount == 2)
+
+        await cache.changeWidth(to: 4)
+
+        #expect(await cache.heldBytes == 0)
+        let narrower = try #require(await cache.slices(at: 0))
+        #expect(narrower.allSatisfy { $0.width == 4 })
+        #expect(await cache.decodeCount == 3)
+
+        // The width already in use is no change: the Page held stays.
+        await cache.changeWidth(to: 4)
+        _ = await cache.slices(at: 0)
+        #expect(await cache.decodeCount == 3)
+    }
+
+    @Test("a width change asked for by a task that was cancelled changes nothing")
+    func cancelledWidthChangeChangesNothing() async throws {
+        let directory = try PNGFixture.makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (urls, pageBytes) = try makePages(count: 3, in: directory)
+        let cache = makeCache(urls: urls, pageBytes: pageBytes)
+        _ = await cache.slices(at: 0)
+
+        let change = Task {
+            while !Task.isCancelled { await Task.yield() }
+            await cache.changeWidth(to: 4)
+        }
+        change.cancel()
+        await change.value
+
+        let slices = try #require(await cache.slices(at: 0))
+        #expect(slices.allSatisfy { $0.width == 8 })
+        #expect(await cache.decodeCount == 1)
+    }
+
+    @Test("reads on either side of width changes decode one at a time")
+    func readsAcrossWidthChangesDoNotOverlap() async throws {
+        let directory = try PNGFixture.makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // Tall enough that decodes running side by side would overlap in time.
+        let urls = try (1...6).map { number in
+            let url = directory.appending(path: String(format: "%04d.png", number))
+            try PNGFixture.write(to: url, width: 64, height: 4000)
+            return url
+        }
+        let cache = SlicedPageCache(urls: urls, widthPixels: 64)
+
+        await withTaskGroup(of: Void.self) { group in
+            for index in urls.indices {
+                group.addTask { _ = await cache.slices(at: index) }
+                group.addTask { await cache.changeWidth(to: index.isMultiple(of: 2) ? 32 : 64) }
+            }
+        }
+
+        #expect(await cache.decodeCount == urls.count)
+        #expect(await cache.mostDecodesAtOnce == 1)
+    }
+
     @Test("a Page that cannot be decoded is remembered as such, not retried")
     func brokenPageNotRetried() async throws {
         let directory = try PNGFixture.makeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let broken = directory.appending(path: "0001.png")
         try Data("not a Page".utf8).write(to: broken)
-        let cache = SlicedPageCache(urls: [broken], screenWidthPixels: 8)
+        let cache = SlicedPageCache(urls: [broken], widthPixels: 8)
 
         #expect(await cache.slices(at: 0) == nil)
         #expect(await cache.slices(at: 0) == nil)
@@ -142,10 +219,9 @@ struct SlicedPageCacheTests {
 
     @Test("an index outside the Pages yields nil without decoding")
     func indexOutOfRange() async throws {
-        let cache = SlicedPageCache(urls: [], screenWidthPixels: 8)
+        let cache = SlicedPageCache(urls: [], widthPixels: 8)
 
         #expect(await cache.slices(at: 0) == nil)
-        await cache.prefetch(around: 0)
         await cache.retain(top: 0)
         #expect(await cache.decodeCount == 0)
     }

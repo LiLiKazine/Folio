@@ -2,14 +2,16 @@ import CoreGraphics
 import Foundation
 
 /// A tall Page decoded for the Vertical strip: sharp at the screen's width, cut into
-/// slices so no single image is too tall for the screen to take, and sized to stay within
-/// a byte budget.
+/// slices so no single picture is too tall for the screen to take, and sized to stay
+/// within a byte budget.
 enum SlicedPage {
     /// The most rows in one slice, in pixels; under every GPU texture limit the design
     /// names (8,192 and 16,384).
     static let sliceMaxHeight = 2048
 
-    /// The most bytes one decoded Page may take: 96 MB on iPhone and iPad, 256 MB on Mac.
+    /// The target for one decoded Page's width x height x 4 bytes: 96 MB on iPhone and iPad,
+    /// 256 MB on Mac. The system can pad each row, so the bytes a Page holds can exceed it by
+    /// a fraction of a percent (0.2% measured on the Mac).
     static func perPageBudget() -> Int {
         #if os(macOS)
             256 * 1024 * 1024
@@ -53,7 +55,12 @@ enum SlicedPage {
             pageSize.height >= pageSize.width
             ? scaledHeight(of: pageSize, atWidth: width) : width
         guard let image = PageImage.decode(url: url, maxPixelSize: longerSide) else { return nil }
-        return slices(of: image)
+        guard let slices = slices(of: image) else {
+            AppLog.reading.info(
+                "A Page could not be cut into slices: \(url.lastPathComponent, privacy: .private)")
+            return nil
+        }
+        return slices
     }
 
     /// The bytes the slices hold: each slice's rows times its bytes per row.

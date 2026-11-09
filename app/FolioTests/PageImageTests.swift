@@ -16,20 +16,16 @@ struct PageImageTests {
         return directory
     }
 
+    /// A picture of one colour, `width` x `height` pixels.
+    private func picture(width: Int, height: Int) throws -> CGImage {
+        try PNGFixture.draw(width: width, height: height) { context in
+            context.setFillColor(red: 0.2, green: 0.4, blue: 0.8, alpha: 1)
+            context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        }
+    }
+
     private func writePNG(to url: URL, width: Int = 64, height: Int = 96) throws {
-        let context = try #require(
-            CGContext(
-                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
-        context.setFillColor(red: 0.2, green: 0.4, blue: 0.8, alpha: 1)
-        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        let image = try #require(context.makeImage())
-        let destination = try #require(
-            CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)
-        )
-        CGImageDestinationAddImage(destination, image, nil)
-        #expect(CGImageDestinationFinalize(destination))
+        try PNGFixture.save(try picture(width: width, height: height), to: url)
     }
 
     @Test("decode downsamples a Page to the longer side at most maxPixelSize")
@@ -89,21 +85,14 @@ struct PageImageTests {
     private func writeJPEG(
         to url: URL, width: Int, height: Int, orientation: CGImagePropertyOrientation
     ) throws {
-        let context = try #require(
-            CGContext(
-                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
-        context.setFillColor(red: 0.2, green: 0.4, blue: 0.8, alpha: 1)
-        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        let image = try #require(context.makeImage())
         let destination = try #require(
             CGImageDestinationCreateWithURL(
                 url as CFURL, UTType.jpeg.identifier as CFString, 1, nil)
         )
         CGImageDestinationAddImage(
-            destination, image, [kCGImagePropertyOrientation: orientation.rawValue] as CFDictionary)
-        #expect(CGImageDestinationFinalize(destination))
+            destination, try picture(width: width, height: height),
+            [kCGImagePropertyOrientation: orientation.rawValue] as CFDictionary)
+        try #require(CGImageDestinationFinalize(destination))
     }
 
     /// Writes `count` Pages and returns their URLs in order.

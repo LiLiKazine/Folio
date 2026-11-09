@@ -1,40 +1,8 @@
 import CoreGraphics
 import Foundation
-import ImageIO
 import Testing
-import UniformTypeIdentifiers
 
 @testable import Folio
-
-/// Writes small two-colour PNG Pages for the tall-Page tests.
-enum PNGFixture {
-    static func makeDirectory() throws -> URL {
-        let directory = FileManager.default.temporaryDirectory
-            .appending(path: "SlicedPageTests-\(UUID().uuidString)", directoryHint: .isDirectory)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        return directory
-    }
-
-    /// Red on the top half, blue on the bottom half, so a slice cut from the wrong rows
-    /// would not look the same.
-    static func write(to url: URL, width: Int, height: Int) throws {
-        let context = try #require(
-            CGContext(
-                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
-        context.setFillColor(red: 1, green: 0, blue: 0, alpha: 1)
-        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        context.setFillColor(red: 0, green: 0, blue: 1, alpha: 1)
-        context.fill(CGRect(x: 0, y: 0, width: width, height: height / 2))
-        let image = try #require(context.makeImage())
-        let destination = try #require(
-            CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)
-        )
-        CGImageDestinationAddImage(destination, image, nil)
-        #expect(CGImageDestinationFinalize(destination))
-    }
-}
 
 @Suite("SlicedPage")
 struct SlicedPageTests {
@@ -73,6 +41,23 @@ struct SlicedPageTests {
         #expect(width < 1179)
         #expect(bytes(at: width) <= budget)
         #expect(bytes(at: width + 1) > budget)
+    }
+
+    @Test(
+        "a Page whose bytes at the screen's width are exactly the budget keeps that width; one byte less narrows it"
+    )
+    func budgetBoundary() {
+        let pageSize = CGSize(width: 3000, height: 40000)
+        // 1,179 wide is 1,179 x 15,720 pixels at 4 bytes each.
+        let bytesAtScreenWidth = 1179 * 15720 * 4
+
+        #expect(
+            SlicedPage.decodeWidth(
+                pageSize: pageSize, screenWidthPixels: 1179, budget: bytesAtScreenWidth) == 1179)
+        #expect(
+            SlicedPage.decodeWidth(
+                pageSize: pageSize, screenWidthPixels: 1179, budget: bytesAtScreenWidth - 1)
+                == 1178)
     }
 
     @Test("the width is at least 1, however small the budget, and never above the Page's own")

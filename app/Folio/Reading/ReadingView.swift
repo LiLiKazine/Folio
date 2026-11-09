@@ -9,8 +9,6 @@ struct ReadingView: View {
     let book: Book
     let model: LibraryModel
     let close: () -> Void
-    /// The Book's Page files in reading order.
-    private let pageURLs: [URL]
 
     /// The Page being read, 0-based. Every change is a Page turn the Library records.
     @State private var index: Int
@@ -26,6 +24,9 @@ struct ReadingView: View {
     /// Vertical, and nil until then. The strip is shown only once they are read, so no
     /// Page's height changes under the reader.
     @State private var pixelSizes: [CGSize?]?
+    /// Where each of the Book's Pages is stored, worked out the first time it is needed
+    /// (see `pageURLs`) and then kept for as long as this screen shows the Book.
+    @State private var pageLocations = PageLocations()
     @FocusState private var isFocused: Bool
     @Environment(\.displayScale) private var displayScale
 
@@ -33,7 +34,6 @@ struct ReadingView: View {
         self.book = book
         self.model = model
         self.close = close
-        pageURLs = book.pages.indices.map { model.pageURL(for: book, at: $0) }
         _index = State(initialValue: Self.startIndex(for: book))
         _mode = State(initialValue: Self.startMode(for: book))
     }
@@ -42,6 +42,13 @@ struct ReadingView: View {
     /// and the last Page when an older edition left the position past the end.
     static func startIndex(for book: Book) -> Int {
         max(min(book.readingPosition ?? 0, book.pages.count - 1), 0)
+    }
+
+    /// Where each of the Book's Pages is stored, in reading order. Not worked out in `init`:
+    /// SwiftUI can make this view again every time the window updates, and a Book can have
+    /// thousands of Pages.
+    private var pageURLs: [URL] {
+        pageLocations.urls { book.pages.indices.map { model.pageURL(for: book, at: $0) } }
     }
 
     /// The Reading Mode a Book opens in: its own.
@@ -200,8 +207,9 @@ struct ReadingView: View {
     }
 
     /// Moves `delta` Pages, stopping at the first and last Page. Page by Page animates the
-    /// turn; Vertical jumps, so the strip's scroll stays code's and never the reader's (see
-    /// `VerticalStripView.isReaderScrolling`).
+    /// turn. In Vertical a turn is a jump, code moving the strip, which must never count as
+    /// the reader's scrolling (`VerticalStripView.isReaderScrolling`), so, like every jump
+    /// in the strip, it is made without animation.
     private func turn(by delta: Int) -> KeyPress.Result {
         let target = index + delta
         guard book.pages.indices.contains(target) else { return .handled }
@@ -223,5 +231,19 @@ struct ReadingView: View {
     /// Reads every Page's pixel size without decoding, away from the main actor.
     @concurrent private static func pixelSizes(of urls: [URL]) async -> [CGSize?] {
         urls.map(PageImage.pixelSize(url:))
+    }
+}
+
+/// Keeps the Book's Page locations once they are worked out. A reference kept in `State`,
+/// so it lasts as long as the screen, and keeping the locations does not redraw it.
+@MainActor private final class PageLocations {
+    private var urls: [URL]?
+
+    /// The locations, worked out by `make` the first time they are asked for.
+    func urls(_ make: () -> [URL]) -> [URL] {
+        if let urls { return urls }
+        let made = make()
+        urls = made
+        return made
     }
 }

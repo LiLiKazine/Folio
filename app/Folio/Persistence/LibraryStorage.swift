@@ -45,8 +45,8 @@ enum LibraryStorage {
         return try makeContainer(at: storeURL)
     }
 
-    /// Container for the store file at `url`, migrating it to the current schema if an
-    /// earlier version wrote it.
+    /// Container for the store file at `url`, opened in the current schema with
+    /// `FolioMigrationPlan`.
     static func makeContainer(at url: URL) throws -> ModelContainer {
         let schema = Schema(versionedSchema: FolioSchemaV2.self)
         return try makeContainer(

@@ -49,6 +49,8 @@ public struct Book: Hashable, Codable, Sendable, Identifiable {
         self.readingMode = readingMode
     }
 
+    /// Keep in step with the stored properties: every one must be decoded here. One added
+    /// with a default value would still compile without it, and come back as that default.
     public init(from decoder: any Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         id = try values.decode(BookID.self, forKey: .id)

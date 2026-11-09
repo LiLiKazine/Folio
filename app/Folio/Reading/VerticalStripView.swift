@@ -27,10 +27,10 @@ struct StripScroll: Equatable {
 /// pixel size gives, top to bottom with nothing between, in one scroll view. The Page at
 /// the top of the screen is the Page being read.
 struct VerticalStripView: View {
-    /// The Book's Page files in reading order.
+    /// Where each of the Book's Pages is stored, in reading order.
     let pageURLs: [URL]
     /// Each Page's pixel size, read before the strip is shown so no Page's height changes
-    /// once it is; nil for a Page whose file is not an image, which takes a square.
+    /// once it is; nil for a Page whose stored data is not a picture, which takes a square.
     let pixelSizes: [CGSize?]
     /// The Page being read, 0-based: the Page at the top of the screen. The reader's own
     /// scrolling sets it; a change from outside (the slider, a key, a switch, opening the
@@ -52,10 +52,12 @@ struct VerticalStripView: View {
         }
     }
 
-    /// Decodes the Pages at the strip's width in pixels; nil until the width is known.
+    /// Decodes the Pages one at a time for the strip's whole life; nil until the strip's
+    /// width is known, then told every new width (`useWidth(pixels:)`).
     @State private var cache: SlicedPageCache?
-    /// The width in pixels `cache` decodes to; the cache is rebuilt only when this changes.
-    @State private var cacheWidthPixels = 0
+    /// The width in pixels `cache` decodes at, once it has taken it; 0 before. The Pages
+    /// kept decoded ask for their slices again when it changes.
+    @State private var decodeWidthPixels = 0
     /// The Page at the top of the screen by the top-of-screen rule, at the last report of
     /// where the strip is; nil before the first report.
     @State private var topPage: Int?
@@ -87,6 +89,7 @@ struct VerticalStripView: View {
 
     /// The strip for a screen `width` points wide.
     private func strip(width: CGFloat) -> some View {
+        let widthPixels = Int((width * displayScale).rounded())
         let pageWidth = width * liveScale
         let stripGeometry = StripGeometry(
             pixelSizes: pixelSizes, width: pageWidth, displayScale: displayScale)
@@ -102,7 +105,7 @@ struct VerticalStripView: View {
                             if pagesToDecode.contains(page) {
                                 StripPage(
                                     index: page, pageCount: pageURLs.count, width: pageWidth,
-                                    cache: cache)
+                                    cache: cache, decodeWidthPixels: decodeWidthPixels)
                             } else {
                                 Color.clear
                             }
@@ -116,9 +119,10 @@ struct VerticalStripView: View {
                 }
             }
             .scrollPosition($position)
-            // At fit the strip is exactly as wide as the screen; it only moves sideways when
-            // zoomed.
-            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            // At fit the strip is exactly as wide as the screen, so it moves sideways only
+            // when zoomed. A strip no taller than the screen does not bounce either, so it is
+            // never pulled to an offset that the end-of-strip rule would read as its last Page.
+            .scrollBounceBehavior(.basedOnSize, axes: [.horizontal, .vertical])
             .onScrollGeometryChange(for: StripScroll.self) {
                 StripScroll($0)
             } action: { _, scroll in
@@ -126,8 +130,11 @@ struct VerticalStripView: View {
             }
             .onScrollPhaseChange { oldPhase, newPhase, context in
                 readerIsScrolling = Self.isReaderScrolling(newPhase)
-                // Where the strip is when the reader starts or stops moving it, so the Page
-                // they stop on is never missed.
+                // Where the strip is when the reader starts or stops moving it. The change that
+                // ends their scrolling counts as theirs, so the Page they stop on is recorded
+                // even when no report came after the last move; and when code jumps while the
+                // strip is still coasting, the Page at the top when the coasting ends is
+                // recorded the same way.
                 follow(
                     StripScroll(context.geometry), in: stripGeometry,
                     byReader: Self.isReaderScrolling(oldPhase) || readerIsScrolling)
@@ -141,14 +148,20 @@ struct VerticalStripView: View {
             }
             // A new width (the window resized, the screen turned, a zoom) changes every
             // Page's height, so the strip is moved to the same place inside the Page under the
-            // top of the screen, centred across.
+            // top of the screen, centred across. When that place is the offset the strip
+            // already had (at the very top of the strip, for one), the scroll view reports
+            // nothing, as it reports only changes, so the Pages to decode are worked out here
+            // for the new geometry. This is code moving the strip: it never changes the Page
+            // being read.
             .onChange(of: stripGeometry) { _, newGeometry in
                 guard let scroll = lastReport.scroll, let reported = lastReport.geometry else {
                     return
                 }
-                position.scrollTo(
-                    x: (pageWidth - width) / 2,
-                    y: newGeometry.offset(keepingPlaceOf: scroll.offset, in: reported))
+                let offset = newGeometry.offset(keepingPlaceOf: scroll.offset, in: reported)
+                position.scrollTo(x: (pageWidth - width) / 2, y: offset)
+                follow(
+                    StripScroll(offset: offset, viewportHeight: scroll.viewportHeight),
+                    in: newGeometry, byReader: false)
             }
             .contentShape(.rect)
             .gesture(
@@ -163,9 +176,7 @@ struct VerticalStripView: View {
                     }
             )
         }
-        .onChange(of: Int((width * displayScale).rounded()), initial: true) { _, pixels in
-            if pixels != cacheWidthPixels { makeCache(widthPixels: pixels) }
-        }
+        .task(id: widthPixels) { await useWidth(pixels: widthPixels) }
         // The Pages on screen ask for their own slices (see `pagesToDecode`); the cache is
         // told only which Page is at the top, so its budget never releases it or the next.
         .task(id: RetainRequest(index: index, cache: cache.map(ObjectIdentifier.init))) {
@@ -196,9 +207,19 @@ struct VerticalStripView: View {
         scale = scale > 1 ? 1 : PageView.zoomedScale
     }
 
-    private func makeCache(widthPixels: Int) {
-        cache = SlicedPageCache(urls: pageURLs, screenWidthPixels: widthPixels)
-        cacheWidthPixels = widthPixels
+    /// Makes the cache at the strip's first width and tells it every later one, so every
+    /// decode runs through the one cache, also while a Mac window is resized. The Pages
+    /// kept decoded ask again only once the cache has taken the new width, so what they get
+    /// is decoded at it. When a newer width cancels this task while the cache is busy, the
+    /// newer one is used instead.
+    private func useWidth(pixels: Int) async {
+        if let cache {
+            await cache.changeWidth(to: pixels)
+            guard !Task.isCancelled else { return }
+        } else {
+            cache = SlicedPageCache(urls: pageURLs, widthPixels: pixels)
+        }
+        decodeWidthPixels = pixels
     }
 }
 
@@ -210,7 +231,7 @@ private final class LastReport {
     var geometry: StripGeometry?
 }
 
-/// The Page at the top, for the cache in use.
+/// The Page at the top, and the cache to tell (none until the strip's width is known).
 private struct RetainRequest: Equatable {
     let index: Int
     let cache: ObjectIdentifier?
@@ -227,6 +248,8 @@ private struct StripPage: View {
     let width: CGFloat
     /// Nil until the strip's width is known; the Page shows nothing until then.
     let cache: SlicedPageCache?
+    /// The width in pixels `cache` decodes at; a new one asks for the slices again.
+    let decodeWidthPixels: Int
 
     /// What decoding the Page produced.
     private enum Loaded {
@@ -239,10 +262,11 @@ private struct StripPage: View {
 
     var body: some View {
         content
-            .task(id: cache.map(ObjectIdentifier.init)) {
+            .task(id: decodeWidthPixels) {
                 guard let cache else { return }
                 let slices = await cache.slices(at: index)
-                // Cancelled means this Page left the screen: nil is no verdict on the file.
+                // Cancelled means this Page left the screen or the width changed: nil is no
+                // verdict on the Page.
                 guard !Task.isCancelled else { return }
                 loaded = slices.map(Loaded.slices) ?? .unavailable
             }

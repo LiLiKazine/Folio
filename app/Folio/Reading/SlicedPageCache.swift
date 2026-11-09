@@ -1,9 +1,9 @@
 import CoreGraphics
 import Foundation
 
-/// Holds the decoded slices of the Pages of one Vertical strip within a byte budget.
-/// Decodes run one at a time (the actor), so two tall Pages are never fully decoded at
-/// once.
+/// Holds the decoded slices of the Pages of one Vertical strip within a byte budget, for
+/// the strip's whole life. Every decode runs on this one actor, one at a time, also across
+/// a change of width, so two tall Pages are never fully decoded at once.
 actor SlicedPageCache {
     /// What decoding one Page produced. A Page that cannot be decoded is held as `nil`
     /// slices, so it is not retried every time the reader scrolls past it.
@@ -14,7 +14,8 @@ actor SlicedPageCache {
     }
 
     private let urls: [URL]
-    private let screenWidthPixels: Int
+    /// The width in pixels Pages are decoded at now (see `changeWidth(to:)`).
+    private var widthPixels: Int
     private let perPageBudget: Int
     private let cacheBudget: Int
     private var held: [Int: Held] = [:]
@@ -24,19 +25,24 @@ actor SlicedPageCache {
     private var clock = 0
     /// How many decodes have run; lets tests see what the cache kept and what it released.
     private(set) var decodeCount = 0
+    /// The decodes running now.
+    private var decodesRunning = 0
+    /// The most decodes that have run at the same time; lets tests see that they never
+    /// overlap.
+    private(set) var mostDecodesAtOnce = 0
 
     /// The bytes of the slices held now.
     var heldBytes: Int { held.values.reduce(0) { $0 + $1.bytes } }
 
-    /// `urls` are the Book's Page files in reading order; `screenWidthPixels` is the
-    /// strip's width in pixels. `cacheBudget` defaults to three Pages' worth at
-    /// `perPageBudget`.
+    /// `urls` locate the Book's Pages in reading order; `widthPixels` is the strip's width
+    /// in pixels, until `changeWidth(to:)` changes it. `cacheBudget` defaults to three
+    /// Pages' worth at `perPageBudget`.
     init(
-        urls: [URL], screenWidthPixels: Int,
+        urls: [URL], widthPixels: Int,
         perPageBudget: Int = SlicedPage.perPageBudget(), cacheBudget: Int? = nil
     ) {
         self.urls = urls
-        self.screenWidthPixels = screenWidthPixels
+        self.widthPixels = widthPixels
         self.perPageBudget = perPageBudget
         self.cacheBudget = cacheBudget ?? 3 * perPageBudget
     }
@@ -54,7 +60,10 @@ actor SlicedPageCache {
         // The Page that asked has scrolled away (its task was cancelled); decoding for it
         // would only delay the Page the reader landed on.
         guard !Task.isCancelled else { return nil }
+        decodesRunning += 1
+        mostDecodesAtOnce = max(mostDecodesAtOnce, decodesRunning)
         let slices = decode(index)
+        decodesRunning -= 1
         held[index] = Held(
             slices: slices, bytes: slices.map(SlicedPage.bytes(of:)) ?? 0, lastUsed: tick())
         decodeCount += 1
@@ -69,16 +78,17 @@ actor SlicedPageCache {
         applyBudget()
     }
 
-    /// Decodes the Pages from one before `index` to two after it that exist, the Page at
-    /// `index` first so the Page the reader is on is ready soonest. Each decode applies the
-    /// cache budget (see `slices(at:)`), and the last step releases down to the budget with
-    /// only the retained pair kept.
-    func prefetch(around index: Int) async {
-        for neighbour in [index, index + 1, index + 2, index - 1]
-        where urls.indices.contains(neighbour) {
-            _ = await slices(at: neighbour)
-        }
-        applyBudget()
+    /// Decodes at `widthPixels` from now on. Every Page held was decoded at the old width,
+    /// so all are let go and each is decoded again when it is next asked for; the Pages
+    /// `retain(top:)` named stay the ones never to release. The width already in use
+    /// changes nothing, and so does a call from a task that was cancelled: the strip
+    /// cancels its width task when a newer width replaces it, and Swift does not promise
+    /// to run calls waiting on an actor in the order they were made (SE-0306), so the
+    /// newer width may already be in use.
+    func changeWidth(to widthPixels: Int) {
+        guard widthPixels != self.widthPixels, !Task.isCancelled else { return }
+        self.widthPixels = widthPixels
+        held = [:]
     }
 
     private func decode(_ index: Int) -> [CGImage]? {
@@ -89,7 +99,7 @@ actor SlicedPageCache {
             return nil
         }
         let width = SlicedPage.decodeWidth(
-            pageSize: pageSize, screenWidthPixels: screenWidthPixels, budget: perPageBudget)
+            pageSize: pageSize, screenWidthPixels: widthPixels, budget: perPageBudget)
         return SlicedPage.decode(url: url, width: width)
     }
 
