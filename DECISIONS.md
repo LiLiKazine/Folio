@@ -553,36 +553,39 @@ Book or switching Reading Mode never moves their place. Two consequences:
   scrolling that way would not move the counter. Not checked.
 
 **Tall Pages are decoded at the screen's width, cut into slices, kept within a
-memory budget, and decoded one at a time.** Some Pages are very tall and narrow
-(a continuous picture may be 800 by 12,000 pixels). Decoding such a Page to fit
-the window, as Page by Page does, makes it blurry once it is stretched to the
-screen's width. Decoding it whole at the screen's width makes it tens of
-megabytes and taller than some graphics hardware can show as one picture. Folio
-does what the open-source reader Mihon (Android) does; Aidoku (iOS) does the
-first step the same way.
+memory budget, and decoded one at a time.** A *slice* is a horizontal band of a
+decoded Page, at most 2,048 pixels tall; a *budget* is the most memory decoded
+Pages may take. Some Pages are very tall and narrow (a continuous picture may be
+800 by 12,000 pixels). Decoding such a Page to fit the window, as Page by Page
+does, makes it blurry once it is stretched to the screen's width. Decoding it
+whole at the screen's width makes it tens of megabytes and taller than some
+graphics hardware can show as one picture. Folio does what the open-source
+reader Mihon (Android) does; Aidoku (iOS) does the first step the same way.
 
 - *Width.* A Page is decoded at the smaller of its own width and the screen's
   width in pixels, so never wider than its own pixels. The width is lowered
   further if the Page would not fit its share of the budget.
-- *Slices.* A *slice* is a horizontal band of a decoded Page, at most 2,048
-  pixels tall. The strip shows a Page's slices edge to edge, so the reader sees
-  one Page, and the whole decoded Page is let go once its slices exist. Each
-  slice is copied into memory of its own rather than cut as a window onto the
-  whole Page, because Apple documents that a cut piece "retains a reference to
-  the original image", which would keep the whole Page in memory behind its
-  slices.
-- *Budget.* A *budget* is the most memory decoded Pages may take: 96 MB for one
-  Page on iPhone and iPad and 256 MB on the Mac, and three times that for all
-  the Pages held at once (288 MB and 768 MB). After every single Page it
-  decodes, the app lets go of the Pages it used least recently until it is back
-  within the budget, but never the Page at the top of the screen or the one
-  after it. The plan applied the budget only after decoding a group of Pages,
-  which after a jump could briefly hold about seven Pages' worth; the design's
-  "memory stays within a stated budget" decided against it.
+- *Slices.* The strip shows a Page's slices edge to edge, so the reader sees one
+  Page, and the whole decoded Page is let go once its slices exist. Each slice
+  is copied into memory of its own rather than cut as a window onto the whole
+  Page, because Apple documents that a cut piece "retains a reference to the
+  original image", which would keep the whole Page in memory behind its slices.
+- *Budget.* The budget is 96 MB for one Page on iPhone and iPad and 256 MB on
+  the Mac, and three times that for all the Pages held at once (288 MB and 768
+  MB). After every single Page it decodes, the app lets go of the Pages it used
+  least recently until it is back within the budget, but never the Page at the
+  top of the screen or the one after it. The plan applied the budget only after
+  decoding a group of Pages, which after a jump could briefly hold about seven
+  Pages' worth; the design's "memory stays within a stated budget" decided
+  against it.
 - *Which Pages.* Only Pages with some part on screen, plus one more on each
   side, are decoded; that is more Pages when they are short.
-- *One at a time.* Decodes run one after another, so two tall Pages are never
-  being decoded at once.
+- *One at a time.* The strip's decodes run one after another, so two tall Pages
+  are not decoded at once. The exception: when the strip's width changes, for
+  example while a Mac window is being resized, the strip starts again with a new
+  set of decoded Pages for the new width, and a decode still running for the old
+  width can overlap the first one for the new width. Not checked; it is on the
+  owner's list.
 
 What the reader would notice: tall Pages are sharp; a Page that left the screen
 and comes back may be blank for a moment while it is decoded again. Two limits
@@ -612,42 +615,46 @@ What the user experiences: a blank moment when a Book opens in Vertical,
 measured on the simulator at 0.01 to 0.02 s for 24 Pages and 0.06 to 0.22 s for
 1,000 Pages.
 
-**The strip is a plain stack, not a lazy one.** A *plain stack* places every row
-before anything is shown; a *lazy stack* places each row only as it comes near
-the screen, to save work in long lists. Apple says lazy stacks "trade some
-degree of layout correctness for performance" and advises to "always start with
-a standard stack view". With the plan's lazy stack, a long jump on the simulator
-put Pages far from where their known heights say they are: the counter read Page
-24 with Page 20 on screen, and a jump to Page 21 landed at the end. The plain
-stack placed every Page exactly. Every row of a plain stack exists at once, so
-rows coming on screen cannot decide what is decoded; the rule above (the Pages
-on screen plus one each side) decides instead. Cost: in a Book of thousands of
-Pages every Page has an empty frame from the start, so opening and scrolling
-could be slower on an older device than with a lazy stack. Apple says to measure
-that on a device, not the simulator, and it has not been measured on a device.
+**The strip is a plain stack, not a lazy one.** Each Page in the strip has a
+*row*, the space kept for it on screen at that Page's height. A *plain stack*
+places every row before anything is shown; a *lazy stack* places each row only
+as it comes near the screen, to save work in long lists. Apple says lazy stacks
+"trade some degree of layout correctness for performance" and advises to "always
+start with a standard stack view". With the plan's lazy stack, a long jump on
+the simulator put Pages far from where their known heights say they are: the
+counter read Page 24 with Page 20 on screen, and a jump to Page 21 landed at the
+end. The plain stack placed every Page exactly. In a plain stack every row is
+made at once, so a row being made cannot be the signal to decode its Page; the
+rule above (the Pages on screen plus one each side) decides instead. Cost: in a
+Book of thousands of Pages an empty row is made for every Page when the Book
+opens, so opening and scrolling could be slower on an older device than with a
+lazy stack. Apple says to measure that on a device, not the simulator, and it
+has not been measured on a device.
 
 **Page heights are rounded to whole screen pixels.** SwiftUI (Apple's
 screen-building framework) measures the screen in *points*; an iPhone has 3
-pixels per point, most Macs 2. The *pixel grid* is the screen's own pixels, and
-a scroll view comes to rest only on whole pixels. A Page's exact height can end
+pixels per point, most Macs 2. The *pixel grid* is the screen's own pixels. On
+the simulator a scroll view was seen to come to rest only on whole pixels; this
+is observed, and Apple does not document it. A Page's exact height can end
 between two pixels. When it did, a jump to that Page could stop a fraction of a
 point above its top. The strip then took the Page before it to be at the top, so
 a jump back to that earlier Page did nothing: the counter read the earlier Page
 while the later one was still on screen. Every Page's height is now rounded to a
-whole number of pixels, so every Page's top is a place the scroll view can stop.
-Cost: each Page is up to half a pixel taller or shorter than its true
-proportions.
+whole number of pixels, so every Page's top is on that grid, where the scroll
+view was seen to stop. Cost: each Page is up to half a pixel taller or shorter
+than its true proportions.
 
 **Zoom in Vertical keeps the reader's place.** Zoom works on the whole strip. A
 pinch zooms from *fit* (the Page filling the screen's width) up to 5 times; a
-double tap zooms to 2.5 times and a second one returns to fit; letting go below
-fit snaps back. On every zoom step, and whenever the width changes (turning the
-device, resizing a Mac window), the strip moves so that the same part of the
-Page at the top stays under the top of the screen: the same fraction of the way
-down that Page. The plan jumped back to the Page's top instead, which made
-zooming in the middle of a tall Page unusable. Across, the strip is put back in
-the middle on every zoom step, so a reader who had panned to one side of a
-zoomed Page is brought back to the middle when they pinch or double tap again.
+double tap zooms to 2.5 times and a second one returns to fit; a pinch to zoom
+out stops at fit, so the strip is never narrower than the screen. On every zoom
+step, and whenever the width changes (turning the device, resizing a Mac
+window), the strip moves so that the same part of the Page at the top stays
+under the top of the screen: the same fraction of the way down that Page. The
+plan jumped back to the Page's top instead, which made zooming in the middle of
+a tall Page unusable. Across, the strip is put back in the middle on every zoom
+step, so a reader who had panned to one side of a zoomed Page is brought back to
+the middle when they pinch or double tap again.
 
 The double tap zooms at once, without an animation. With the animation, a double
 tap deep in the strip landed on another Page or a blank screen. Apple says the

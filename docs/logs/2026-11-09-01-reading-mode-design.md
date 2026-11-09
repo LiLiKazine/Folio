@@ -85,4 +85,5 @@ and the measurements: `docs/logs/2026-11-09-02-reading-mode-implementation.md`.
 | 1012734 | feat(reading): Vertical Reading Mode as one strip of touching Pages, chosen from the chrome |
 | 43f8746 | fix(reading): the strip counts only the reader's scrolling, keeps their place inside a Page when zoomed, and snaps Page heights to the pixel grid |
 | 466ac34 | fix(reading): double tap zoom keeps the reader's place by not animating the size change |
-| (this) | docs(reading): record the Reading Mode rulings and the owner's check list |
+| 4d01b80 | docs(reading): record the Reading Mode rulings and the owner's check list |
+| (this) | docs(reading): correct the owner's check list and label observed behaviour as observed |

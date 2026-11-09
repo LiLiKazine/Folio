@@ -64,18 +64,18 @@ marks what an agent already saw on the iPhone 17 Pro simulator; nothing else
 has been tried by anyone. The generated test Books used on the simulator are
 in a temporary folder that may since have been cleared:
 `/private/tmp/claude-501/-Users-leo-Developer-Folio/2b647ec0-073d-40c0-8b4f-1235ca57bf1a/scratchpad/books`.
-Strip Mixed has 24 Pages, with a 600 x 12,000 pixel Page as Page 7 and a text
-file named like a picture as Page 5; Strip Short has 12 Pages wider than they
+Strip Mixed has 24 Pages, with a 600 x 12,000 pixel Page as Page 7, and a
+Page 5 that holds text, not a picture, though it is named like one; Strip Short has 12 Pages wider than they
 are tall; Strip Thousand has 1,000 small Pages. Any Book with a very tall Page,
 and any Book of landscape pictures, will do as well.
 
 ### Mac (nothing checked)
 
-1. Open a Book and choose "Vertical" in the toolbar's Reading Mode control: the Pages become one strip at the window's width with no gaps between them, and the control shows "Vertical".
+1. Open a Book, click the Page once to show the controls (the Reading Mode control is in the toolbar only while they are shown), and choose "Vertical" in it: the Pages become one strip at the window's width with no gaps between them, and the control shows "Vertical".
 2. Scroll the strip with the mouse wheel, then with two fingers on the trackpad: the strip moves, and the counter at the bottom changes to each Page as its top passes the top of the window.
 3. Close the Book: its card in the Library reads "Page n of N" for the Page the counter showed last.
 4. Reopen the Book, then quit Folio, relaunch it and reopen the Book again: both times it opens in Vertical with that Page's top at the top of the window, and a Book you did not switch still opens Page by Page.
-5. In a Book whose Pages are all wider than they are tall, choose Vertical while on Page 5, then close and reopen it: Page 5 is at the top and the counter reads Page 5.
+5. In a Book whose Pages are all wider than they are tall, make the window narrow enough that two or more Pages fit in its height at once (or use a Book of small Pages), choose Vertical while on Page 5, then close and reopen it: Page 5 is at the top and the counter reads Page 5.
 6. Scroll slowly through a very tall Page: it is sharp all the way down, with no visible join between its bands, and the app keeps responding while you scroll.
 7. While on any Page in Vertical, choose "Page by Page": the same Page is shown.
 8. In Vertical press the left and right arrow keys: the strip jumps to the top of the previous or next Page and the counter follows; in Page by Page they turn Pages as before.
@@ -84,22 +84,24 @@ and any Book of landscape pictures, will do as well.
 11. While part-way down a tall Page in Vertical, drag the window's edge to make it wider and narrower: the part of the Page you were looking at stays at the top of the window, the Pages are sharp again when you stop, and note whether the resize stutters (the Pages are decoded again at every new width while you drag).
 12. In the middle of a tall Page, pinch on the trackpad and then double-click: the part you were looking at stays at the top of the window, the strip is centred left to right, and a second double-click goes back to fit.
 13. Scroll to the very end of a Vertical Book, close it and reopen it: the strip ends exactly at the bottom of the last Page.
+14. With a Library made by the previous version of Folio (for example a build of the main branch from before this work), run this version over it without deleting the app's data: every Book is still there with its Cover, its card shows the same "Page n of N" as before, and each Book opens Page by Page.
 
 ### iPhone (simulator only; nothing tried on a real iPhone)
 
 1. Open a Book, tap to show the chrome, tap the Reading Mode button (the book symbol) in the navigation bar and choose "Vertical": the Pages become one strip, and the menu shows Vertical ticked. Seen on the simulator.
-2. Swipe up and down: the counter changes to each Page as its top passes the top of the screen, and tapping, or resting a finger without moving it, never changes it. Seen on the simulator.
+2. Swipe up and down: the counter changes to each Page as its top passes the top of the screen, and a tap, or a press held without moving, never changes it. Seen on the simulator for four taps and a one-second press; the simulator never reported a finger resting before a scroll begins (the case ruling 13 is about), so that case rests on Apple's description.
 3. Close the Book: its card reads "Page n of N" for the Page the counter showed last. Seen on the simulator.
 4. Reopen the Book, then quit Folio, relaunch it and reopen the Book: both times it opens in Vertical with that Page's top at the top of the screen. Reopening seen on the simulator; relaunching not recorded.
 5. In a Book whose Pages are all wider than they are tall, choose Vertical while on Page 5, then close and reopen it: Page 5 is at the top and the counter reads Page 5. Seen on the simulator.
-6. On a real iPhone, scroll slowly through a very tall Page: it is sharp all the way down, with no visible join between its bands, and scrolling stays smooth.
+6. On a real iPhone, scroll slowly through a very tall Page: it is sharp all the way down, with no visible join between its bands, and scrolling stays smooth; if you run Folio from Xcode, note the memory its gauge shows while that Page is on screen (no figure from a device exists yet).
 7. While on any Page in Vertical, choose "Page by Page": the same Page is shown. Seen on the simulator.
 8. Deep in a long Vertical Book (past Page 20 of Strip Mixed), turn the phone sideways and back: you stay on the same Page at the same place in it (not checked; turning is an animated size change, and an animated zoom once landed the reader on the wrong Page, possibly for the same reason).
-9. On a real iPhone, in the middle of a tall Page, pinch while also moving your two fingers, then let go below fit: the part you were looking at stays under the top of the screen while you pinch, and the strip snaps back to fit when you let go (a plain pinch was seen on the simulator; moving while pinching and letting go below fit were not).
+9. On a real iPhone, in the middle of a tall Page, pinch while also moving your two fingers, then pinch to zoom out past fit: the part you were looking at stays under the top of the screen while you pinch, and zooming out stops at fit, so the strip never becomes narrower than the screen (a plain pinch was seen on the simulator; moving while pinching and zooming out past fit were not).
 10. Zoom in, pan sideways to one edge, then pinch or double tap again: the strip goes back to the middle, left to right, on every zoom step (known and expected; say if it gets in the way).
 11. Deep in the strip, double tap: it zooms in at once, without an animation, centred and at the same place, and a second double tap goes back to fit. Seen on the simulator.
 12. On a real iPhone, open a Book of 1,000 or more Pages in Vertical and scroll fast for a long way: the blank moment before the strip appears is short, scrolling stays smooth, and the system does not close the app for using too much memory (on the simulator: 0.06 to 0.22 s before the strip appeared, and 67 MB after a long scroll).
 13. Scroll to the very end of a Vertical Book, close it and reopen it: the strip ends exactly at the bottom of the last Page. Seen on the simulator.
+14. With the previous version of Folio installed and a Library in it (some Books part-read), install this version over it without deleting the app: every Book is still there with its Cover, its card shows the same "Page n of N" as before, and each Book opens Page by Page.
 
 ### iPad (nothing checked on an iPad or its simulator)
 
@@ -113,10 +115,11 @@ and any Book of landscape pictures, will do as well.
 - `Domain/ReadingMode.swift` (new): `ReadingMode`, either `pageByPage` or
   `vertical`.
 - `Domain/Book.swift`: a Book has a `readingMode`, defaulting to
-  `pageByPage`. `Book`'s decoding was written out by hand so a Book saved
-  without a Reading Mode (every stored Book) decodes as Page by Page; its
-  encoding is still the one Swift writes automatically, unchanged apart from
-  the new field.
+  `pageByPage`. The code that reads a Book back from its saved form
+  (`Book.init(from:)`) was written out by hand, so a Book saved without a
+  Reading Mode (every stored Book) reads back as Page by Page; the code that
+  writes a Book into its saved form is still the one Swift writes
+  automatically, unchanged apart from the new field.
 - `Domain/LibraryEvent.swift`: `readingModeChanged(BookID, mode:)`.
 - `Library/LibraryError.swift`: `LibraryOperation.chooseReadingMode`
   ("Choose Reading Mode"), so a failed save can name what the user was doing.
@@ -135,8 +138,8 @@ and any Book of landscape pictures, will do as well.
 - `LibraryTests`: choosing Vertical stores it and announces
   `readingModeChanged`; choosing the stored mode announces nothing and does
   not save; an unknown Book throws `notFound(.chooseReadingMode)`; a Book
-  encoded without `readingMode` decodes as Page by Page and equals the Book
-  it was made from; a Vertical Book survives encode and decode.
+  saved without `readingMode` reads back as Page by Page and equals the Book
+  it was made from; a Vertical Book is saved and read back unchanged.
 - `LibraryErrorTests`: `chooseReadingMode` joins the operation switch and the
   forced-storage-failure cases (`books`, `update`), so a failing save is
   proven to throw `storage(.chooseReadingMode)`.
@@ -455,8 +458,9 @@ itself is not misled.
   With the slices made by cropping instead of redrawing,
   `slicesKeepRowOrder` fails. Both edits were reverted.
 - The brief's width test could not be written as given: for a 3,000 x 40,000 Page
-  on a 1,179-wide screen with the 96 MB budget, 1,179 pixels wide takes about
-  74 MB, which fits, so "one pixel wider would not fit" is false there. The
+  on a 1,179-wide screen with the 96 MB budget, 1,179 pixels wide takes
+  74,449,920 bytes (71.0 MB, counting a MB as 1,048,576 bytes as the budgets
+  do), which fits, so "one pixel wider would not fit" is false there. The
   test was split in two: at 96 MB the width is the screen's 1,179; with a 32 MB
   budget it is lowered, and one pixel wider no longer fits.
 - A test I first wrote to show that slices own their pixels (the length of each
@@ -535,7 +539,7 @@ The terms below are used in this section.
   - animating: code is scrolling with an animation.
 - **A plain stack** works out where every row sits before anything is shown. **A lazy stack** works out a row's place only as that row comes near the screen. Apple says this trades "some degree of layout correctness for performance" (quoted below), and on the simulator rows far from the screen were not where their known heights put them (see "Why a plain stack").
 - **The Pages kept decoded** are the Pages the strip asks the cache for at a given moment: every Page with any part on screen, plus one more on each side.
-- **The pixel grid** is the screen's own dots. On an iPhone with 3 pixels per point, a scroll view comes to rest only on whole pixels, which are thirds of a point.
+- **The pixel grid** is the screen's own dots. On the iPhone simulator, with 3 pixels per point, the scroll view was seen to come to rest only on whole pixels, which are thirds of a point. This is observed on the simulator; Apple does not document it (see "What the documentation does not say").
 
 ### What Changed
 
@@ -543,14 +547,14 @@ The terms below are used in this section.
   - It is a scroll view that moves down, and sideways only when zoomed. Inside it is a plain stack of rows, one per Page. Each row is exactly as tall as the Page's pixel size gives at the screen's width; a Page that is not a picture is a square.
   - A row among the Pages kept decoded shows that Page's slices from the cache, nothing while they are being decoded, or the placeholder if the Page cannot be decoded. Any other row shows nothing and does not ask the cache.
   - The strip keeps its own cache of slices. It is rebuilt when the screen's width in pixels changes, and it is told the Page at the top so its budget never lets go of that Page or the next.
-  - Zoom uses the same gestures and limits as a single Page: a pinch up to 5 times; a double tap to 2.5 times and again back to fit; letting go below fit snaps back (not tried on the simulator). It zooms the whole strip, and the reader will notice three differences from a single Page:
+  - Zoom uses the same gestures and limits as a single Page: a pinch up to 5 times; a double tap to 2.5 times and again back to fit; a pinch to zoom out stops at fit, so the strip is never narrower than the screen. (The design says letting go below fit snaps back; as on a single Page, the code holds the zoom at fit during the pinch, so there is nothing to snap back.) It zooms the whole strip, and the reader will notice three differences from a single Page:
     - zooming, and any other change of the screen's width, keeps the reader at the same place inside the Page under the top of the screen (fix round 1);
     - a double tap zooms at once, without the animation a single Page uses (fix round 2);
     - on every zoom step the strip is centred across, so a reader who had panned sideways is put back in the horizontal middle.
 - **`Reading/StripGeometry.swift`:**
   - `pagesToDecode(offset:viewportHeight:)` gives the Pages kept decoded for a scroll position.
   - `offset(keepingPlaceOf:in:)` gives, for a new width or zoom, the position that keeps the reader the same fraction of the way down the Page under the top of the screen.
-  - Every Page's height is now rounded to the screen's pixel grid; the display scale is passed in (fix round 1).
+  - Every Page's height is now rounded to the screen's pixel grid; the screen is asked how many pixels it has per point rather than a number being assumed (fix round 1).
 - **`Reading/ReadingView.swift`:**
   - The screen holds the Reading Mode, starting from the Book's own (`startMode(for:)`), and shows the pager or the strip accordingly. A switch makes SwiftUI treat the content as a new view (it gets a new identity), which resets zoom.
   - Choosing a mode changes the screen at once and asks the model to save the choice afterwards. A failed save stays log-only, in the model (Task 2).
@@ -593,7 +597,7 @@ With the plan's lazy stack, on the iPhone simulator, after a slider drag to the 
 
 Apple documents why, in the quotes under "Apple documentation relied on" below: a lazy stack works out a row's place only as it nears the screen, while a plain stack knows every row's size.
 
-With the plain stack the same checks pass: the positions match the known Page heights exactly. The cost is that every row exists at once, as a small empty frame; for a 1,000-Page Book that is 1,000 rows. Because a plain stack creates every row at once, decoding cannot start "when a row appears". The Pages kept decoded decide it instead.
+With the plain stack the same checks pass: the positions match the known Page heights exactly. The cost is that every row (the space kept on screen for one Page) exists at once, empty until its Page is decoded; for a 1,000-Page Book that is 1,000 rows. Because a plain stack creates every row at once, decoding cannot start "when a row appears". The Pages kept decoded decide it instead.
 
 ### Apple documentation relied on
 
@@ -667,7 +671,7 @@ All on the iPhone 17 Pro simulator, iOS 26.5, driven by an automation tool that 
 
 All on the iPhone 17 Pro simulator, iOS 26.5. The test Books were made outside the repository from generated pictures:
 
-- **Strip Mixed**, 24 Pages: 800 x 4,000 and 600 x 12,000 Pages, wide Pages, and Page 5, a text file named like a picture.
+- **Strip Mixed**, 24 Pages: 800 x 4,000 and 600 x 12,000 Pages, wide Pages, and Page 5, which holds text, not a picture, though it is named like one.
 - **Strip Short**, 12 Pages of 1,600 x 900, all shorter than the screen.
 - **Strip One**, 1 Page.
 - **Strip Thousand**, 1,000 Pages of 120 x 180 and 180 x 120.
@@ -687,7 +691,7 @@ All on the iPhone 17 Pro simulator, iOS 26.5. The test Books were made outside t
 | Switching after a zoom | Strip came back at fit |
 | All Pages shorter than the screen | Switching on Page 5 and reopening both put Page 5 at the top; counter "Page 5 of 12" |
 | One-Page Book | Slider disabled; Page 1 at every position, including when pulled past either end |
-| Page that is not a picture (a text file named like one) | Square of the screen's width with the placeholder; reaching it did not move the strip |
+| Page that is not a picture (Page 5, which holds text) | Square of the screen's width with the placeholder; reaching it did not move the strip |
 
 ### Measured (simulator on this Mac, not a device)
 
@@ -793,14 +797,14 @@ Rotation: not checked (see Not checked).
 
 **3. A jump could land just above a Page's top, and the next jump back was lost (ruling 15).**
 
-Defect: Page heights were not on the pixel grid, so a Page's top could fall between pixels while the scroll view stops on whole pixels.
+Defect: Page heights were not on the pixel grid, so a Page's top could fall between pixels while the scroll view stops on whole pixels (observed on the simulator; Apple does not document it).
 
 Reproduced first on the committed code, with a generated Book of twelve 1,000 x 1,001 Pages (402.402 points tall each):
 1. The slider jump to Page 6 (top 2,012.010) stopped at 2,012.000.
 2. The rule then read Page 5 at the top.
 3. A slider step back to Page 5 was swallowed by the "already at the top" check. The counter read "Page 5 of 12" while Page 6 was at the top.
 
-Change: `StripGeometry` now takes the display's pixels per point and rounds every Page's height to a whole number of screen pixels. Its tops and the strip's height are counted in whole pixels, so every top lies on the grid where the scroll view stops.
+Change: `StripGeometry` now takes the display's pixels per point and rounds every Page's height to a whole number of screen pixels. Its tops and the strip's height are counted in whole pixels, so every top lies on the grid where the scroll view was seen to stop.
 
 Seen on the simulator with the fix:
 - the jump to Page 6 stopped at 2,011.667, exactly its top, and read Page 6;
@@ -901,12 +905,12 @@ Gate: `./scripts/test.sh macos`, then `SIMULATOR=F9304E8C-40F4-4962-A836-C10615C
 
 ### Not checked
 
-- No new measurement was made. The memory table below brings together the figures from Tasks 3 and 4. The plan asked for an 800 x 12,000 sample Page dropped into a Book; that size was measured only as a decoded size on the Mac, and the on-screen figures are for a 600 x 12,000 Page.
+- No new measurement was made. The plan asked for a fresh measurement of an 800 x 12,000 sample Page dropped into a Book, and it was not repeated in Task 5. The memory table below uses Task 3's decoded sizes, measured on the Mac (including that 800 x 12,000 Page), and Task 4's on-screen figures, measured on the iPhone simulator for a 600 x 12,000 Page. A measurement on a device is on the check list (iPhone items 6 and 12).
 - The app was not run for this task; it changes documents only.
 
 ## Memory for tall Pages
 
-Measured in Tasks 3 and 4; nothing here was measured on a device. *Slices held* is the cache's own count of the bytes of the bands it keeps (rows times bytes per row). *The app's memory* is what `footprint` reports. A MB here is 1,048,576 bytes, the unit the budgets are set in, so 96 MB is 100,663,296 bytes.
+Measured in Tasks 3 and 4; nothing here was measured on a device. The plan's fresh measurement of an 800 x 12,000 sample Page in a Book was not repeated in Task 5: the 800 x 12,000 figures below are Task 3's decoded sizes on the Mac, the on-screen figures are Task 4's for a 600 x 12,000 Page on the iPhone simulator, and a measurement on a device is on the check list (iPhone items 6 and 12). *Slices held* is the cache's own count of the bytes of the bands it keeps (rows times bytes per row). *The app's memory* is what `footprint` reports. A MB here is 1,048,576 bytes, the unit the budgets are set in, so 96 MB is 100,663,296 bytes.
 
 | What | Where | Result |
 | --- | --- | --- |
@@ -941,7 +945,7 @@ Every ruling the controller (the agent that coordinated the implementation tasks
 
 **Ruling 5: one word added early.** Task 1 added the new event's name to one existing list in the Library screen's model, so the app kept building after Task 1; the plan had it in Task 2. If wrong: nothing; the same one-word change landed one commit earlier.
 
-**Ruling 6: what the strip's scroll report carries.** It carries both how far the strip is scrolled and how tall the visible area is, both read from Apple's scroll geometry. The top-of-the-screen rule needs both, and the plan's version gave only the first. If wrong: names inside one view; nothing a reader sees.
+**Ruling 6: what the strip's scroll report carries.** It carries both how far the strip is scrolled and how tall the visible area is, both taken from what Apple's scroll view reports about its own position and size. The top-of-the-screen rule needs both, and the plan's version gave only the first. If wrong: only how one part of the code names these two numbers; nothing a reader sees.
 
 **Ruling 7, as first written: hand checks on the Mac.** Agents were to check the Mac app only as far as they could drive it, and report anything they could not see as not checked.
 
@@ -951,7 +955,7 @@ Every ruling the controller (the agent that coordinated the implementation tasks
 - An iTerm2 "Quit iTerm2?" dialog was showing afterwards; whether the keystrokes caused it is unknown.
 - If wrong: nothing on the Mac has been checked by anyone but you, so every Mac item on the list is open.
 
-**Ruling 8: the width test for a very large Page.** The plan's test expected a 3,000 x 40,000 pixel Page on an iPhone to need a narrower width than the screen's to fit the 96 MB budget. At the screen's 1,179 pixels it needs only about 71 MB, so it fits. The test became two: at 96 MB the width is the screen's; with a 32 MB budget it is lowered, and one pixel wider would not fit. If wrong: test numbers only; the rule is unchanged.
+**Ruling 8: the width test for a very large Page.** The plan's test expected a 3,000 x 40,000 pixel Page on an iPhone to need a narrower width than the screen's to fit the 96 MB budget. At the screen's 1,179 pixels it needs only 74,449,920 bytes (71.0 MB, counting a MB as 1,048,576 bytes as the budgets do), so it fits. The test became two: at 96 MB the width is the screen's; with a 32 MB budget it is lowered, and one pixel wider would not fit. If wrong: test numbers only; the rule is unchanged.
 
 **Ruling 9: the memory budget is applied after every decode.** The cache gets back within its budget after every single Page it decodes, not once after decoding a group of up to four as the plan said. The design's "memory stays within a stated budget however tall they are" is binding. Before, a slider jump could briefly hold about seven Pages' worth: about 672 MB on an iPhone, against 288 MB. If wrong: the cache lets go more often. A Page just outside the two it always keeps may then be decoded again when the reader comes back to it, seen as a moment's blank space before it appears.
 
@@ -967,13 +971,13 @@ If wrong:
 
 **Ruling 11: the strip appears only once every Page's size is known.** Every Page's pixel size is read before the strip is shown, from the start of its stored data and without decoding. The plan had squares first and real heights later, but heights arriving late would move Pages under the reader, which the design rules out. If wrong: a blank moment when a Vertical Book opens. On the simulator it was 0.01 to 0.02 s for 24 Pages and 0.06 to 0.22 s for 1,000; not measured on a device.
 
-**Ruling 12: a plain stack, and a rule for which Pages are decoded.** The strip places every row before showing anything (a plain stack), instead of the plan's lazy stack, which places rows only as they near the screen. Apple says lazy stacks give up some accuracy in where rows sit, and on the simulator Pages were thousands of points from their known heights after a long jump. Which Pages are decoded is decided by a small tested rule from where the strip is: the Pages on screen plus one each side, more when they are short. It does not depend on rows appearing, and it adds no tuned number. If wrong: every Page has an empty frame from the start, so a Book of thousands of Pages could open more slowly or scroll less smoothly on an older phone than a lazy stack would. Not measured on a device; iPhone item 12.
+**Ruling 12: a plain stack, and a rule for which Pages are decoded.** Each Page in the strip has a *row*, the space kept for it on screen at that Page's height. The strip makes every row before showing anything (a plain stack), instead of the plan's lazy stack, which makes rows only as they near the screen. Apple says lazy stacks give up some accuracy in where rows sit, and on the simulator Pages were thousands of points from their known heights after a long jump. In a plain stack every row is made at once, so a row being made can no longer be the signal to decode its Page. Instead a small tested rule works out, from where the strip is scrolled, which Pages to decode: the Pages on screen plus one each side, more when they are short. The other way Apple offers, telling the app when a row becomes visible, needs an amount of the row that must be visible, and any amount chosen would have been a guess. If wrong: an empty row exists for every Page from the moment the Book opens, so a Book of thousands of Pages could open more slowly or scroll less smoothly on an older phone than a lazy stack would. Not measured on a device; iPhone item 12.
 
 **Ruling 13: a finger that has not moved is not scrolling.** This amends ruling 10: only dragging and coasting count, not "tracking", which Apple describes as a finger down where "the user hasn't started a scroll". Before, a tap at the end of the strip could have saved the last Page while the counter showed the one before. If wrong: none seen; a drag reports dragging as soon as it moves. Tracking was never seen on the simulator, so this rests on Apple's text.
 
 **Ruling 14: a change of size keeps the reader's place inside the Page.** The zoom or the width can change through a pinch, a double tap, turning the device or resizing a Mac window. The strip then keeps the same point of the Page at the top under the top of the screen, as a fraction of that Page's height, instead of jumping to the Page's top. It does this through Apple's documented way of scrolling to an exact position. If wrong: after a resize the reader can be a few points from where they were; the counter is not affected.
 
-**Ruling 15: Page heights on the pixel grid.** The *pixel grid* is the screen's own dots: an iPhone has 3 per point, and a scroll view comes to rest only on whole pixels. Each Page's height is rounded to whole screen pixels, so every Page's top is a place the scroll view can stop. The display's pixels per point is passed in, rather than a new fixed number.
+**Ruling 15: Page heights on the pixel grid.** The *pixel grid* is the screen's own dots; an iPhone has 3 per point. On the simulator the scroll view was seen to come to rest only on whole pixels; this is observed, and Apple does not document it. Each Page's height is rounded to whole screen pixels, so every Page's top is on that grid. The app asks the screen how many pixels it has per point, rather than assuming a number, so this holds on every screen.
 
 The defect was reproduced first: a jump stopped a fraction of a point above a Page's top, and the strip took the Page before it to be at the top. A jump back to that earlier Page then did nothing, leaving the counter on the earlier Page with the later one on screen.
 
@@ -1004,11 +1008,11 @@ On the owner's check list:
 
 - Mac: whether the up and down arrows and Page Up and Page Down scroll the strip, and whether the counter follows (Mac item 9).
 - Mac: resizing a window in Vertical (Mac item 11). The cache is rebuilt at every pixel of width change, so decodes repeat while dragging, and an old decode can overlap a new one. If left: resizing may stutter or show blank Pages until you stop.
-- A two-finger pinch on a real phone, moving while pinching, and letting go below fit, which was not tried on the simulator (iPhone item 9).
+- A two-finger pinch on a real phone, moving while pinching, and zooming out past fit, which was not tried on the simulator (iPhone item 9). The ledger's "letting go below fit" cannot be seen: the code holds the zoom at fit during the pinch, so what can be checked is that zooming out stops at fit.
 
 For the final round of code fixes (not done; this task changes documents only):
 
-- **Book's decoding.** It is written out field by field and needs a comment to keep it in step with the Book's stored fields. If left: a setting added to a Book later could silently come back as its default after a relaunch.
+- **Reading a saved Book back.** The code that turns a Book's saved form back into a Book (`Book.init(from:)`) is written out field by field and needs a comment to keep it in step with the Book's fields. If left: a setting added to a Book later could silently come back as its default after a relaunch.
 - **The comment on `LibraryStorage.makeContainer(at:)`.** It says the upgrade stage makes an old store open, which the test could not show. If left: nothing a user sees; a later change might rely on the stage more than the evidence allows.
 - **The test `v1StoreOpensAsPageByPage`.** It should say it also passes with no stages. Nothing a user sees.
 - **The budget comment in `SlicedPage.swift`.** It overstates how exact the per-Page budget is; fix the comment, or count rows without their padding. If left: a very wide and tall Page on the Mac can take up to 0.2% more than 256 MB.
@@ -1016,9 +1020,9 @@ For the final round of code fixes (not done; this task changes documents only):
 - **The shared test-Page writer.** It lives in one test file and repeats drawing code from another, and one check should stop the test outright when writing the test Page fails. Nothing a user sees.
 - **Missing tests.**
   - The width rule exactly at the budget. Nothing a user sees.
-  - The order in which a prefetch decodes has no test of its own, and one test's bound is loose. If left: a later change could make the Page on screen ready later without any test failing.
-  - The rule that only the reader's scrolling counts, and the check that skips a jump to the Page already at the top, live inside the view with no test of their own; a small separate value would let them be tested. If left: a later change could bring back a swallowed jump without any test failing.
-- **Small differences from the brief.** `StripGeometry` holds fixed values where the brief said changeable ones, and the cache's prefetch waits where it need not. Recorded, no change planned; nothing a user sees.
+  - The order in which the strip's cache decodes during a prefetch has no test of its own, and one test's bound is loose. If left: nothing a reader sees today, because nothing in the app calls that prefetch (`SlicedPageCache.prefetch(around:)`); only the tests do. The strip asks the cache for each Page on screen itself.
+  - The rule that only the reader's scrolling counts, and the check that skips a jump to the Page already at the top, live inside the screen's code with no test of their own; moving them into a small piece of code of their own, outside the screen, would let tests check them. If left: a later change could bring back a swallowed jump without any test failing.
+- **Two small differences from the brief.** The strip's geometry, once worked out, cannot be changed afterwards, where the brief described it as changeable; and the cache's prefetch makes whatever calls it wait until it finishes, where it could have been written not to. Recorded, no change planned; nothing a user sees (and nothing in the app calls that prefetch).
 - **Two code comments.** One gives the wrong reason (`turn(by:)` in `ReadingView`). One says too much: in `VerticalStripView`, a jump made while the strip coasts is recorded when the coasting ends. Nothing a user sees.
 - **The list of Page locations.** `ReadingView` rebuilds it (1,000 entries for a 1,000-Page Book) each time SwiftUI re-creates the screen; it should be made once. If left: a little extra work on each redraw in very long Books; not measured.
 - **Which Pages are decoded after a zoom.** This is worked out only when the scroll view reports a move. A width or zoom change that leaves the scroll position where it was keeps the Pages chosen for the old size; the final reviewer is to check whether this still matters after ruling 16. If left: after zooming out where the position does not change (at the very top of the strip), a Page that came on screen might stay blank until the next scroll.
@@ -1041,4 +1045,5 @@ Noted by the implementers, with no ruling yet:
 | 1012734 | feat(reading): Vertical Reading Mode as one strip of touching Pages, chosen from the chrome |
 | 43f8746 | fix(reading): the strip counts only the reader's scrolling, keeps their place inside a Page when zoomed, and snaps Page heights to the pixel grid |
 | 466ac34 | fix(reading): double tap zoom keeps the reader's place by not animating the size change |
-| (this) | docs(reading): record the Reading Mode rulings and the owner's check list |
+| 4d01b80 | docs(reading): record the Reading Mode rulings and the owner's check list |
+| (this) | docs(reading): correct the owner's check list and label observed behaviour as observed |
