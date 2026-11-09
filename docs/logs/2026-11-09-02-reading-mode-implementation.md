@@ -424,6 +424,8 @@ The terms below are used in this section.
   - A row among the Pages kept decoded shows that Page's slices from the cache, or the placeholder if the Page cannot be decoded. Any other row shows nothing and does not ask the cache.
   - The strip keeps its own cache of slices. It is rebuilt when the screen's width in pixels changes, and it is told the Page at the top so its budget never lets go of that Page or the next.
   - Zoom works as it does on a single Page: pinch, double tap to zoom in and to go back to fit, letting go below fit snaps back. Zooming, and any other change of the screen's width, keeps the reader at the same place inside the Page under the top of the screen (fix round 1).
+  - A double tap zooms at once, without the animation a single Page uses (fix round 2).
+  - On every zoom step the strip is centred across, so a reader who had panned sideways is put back in the horizontal middle.
 - **`Reading/StripGeometry.swift`:**
   - `pagesToDecode(offset:viewportHeight:)` gives the Pages kept decoded for a scroll position.
   - `offset(keepingPlaceOf:in:)` gives, for a new width or zoom, the position that keeps the reader the same fraction of the way down the Page under the top of the screen.
@@ -454,7 +456,9 @@ Each time the strip moves, the scroll view reports two numbers: how far the stri
    The "not already at the top" part is the one check the brief asked for, and it is still needed. Every Page the reader scrolls onto comes back to the strip as a change of the Page being read. Without the check, the strip would then pull that Page's top up to the top of the screen while the reader is still scrolling.
 
    It used to compare with "the Page the rule last reported". It now compares with the Page at the top at the last report, because the old form could go stale after a slider jump and then skip a later jump.
-5. **When the screen's width or the zoom changes, every Page's height changes.** The strip then moves to the same place inside the Page under the top of the screen: the same fraction of the way down that Page, centred across (fix round 1). The Page being read does not change.
+5. **When the screen's width or the zoom changes, every Page's height changes.** The strip then moves to the same place inside the Page under the top of the screen: the same fraction of the way down that Page (fix round 1). The Page being read does not change.
+
+   Across, the strip is centred on every zoom step. A reader who had panned sideways to a corner of the Page is put back in the horizontal middle each time they pinch or double tap.
 
 ### Why a plain stack (ruling 12)
 
@@ -532,7 +536,9 @@ All on the iPhone 17 Pro simulator, iOS 26.5, driven by an automation tool that 
 - **With the strip under the whole screen (ignoring the safe area), the top and bottom insets were 0**, so the visible rectangle's height (874 points) is the visible area.
 - **Jumps land on the Page's top to within the screen's pixel grid.** The scroll view stops on thirds of a point: Page 9's top is 12,629.5 and the strip stopped at 12,629.667. Because only the reader's scrolling changes the Page being read, this rounding cannot move the counter.
 - **A strip shorter than the screen is centred vertically.** The one-Page Book's Page sits 135 points down. Nothing in the spec asks otherwise, so nothing was added.
-- **A double-tap zoom lands at the left edge of the zoomed strip.** A pinch zoom stays centred. Vertically, both keep the reader's place (fix round 1).
+- **Double tap and pinch now behave alike.** Both keep the reader's place vertically and centre the strip across.
+  - Until fix round 2 the double tap zoomed with an animation. It then landed at the left edge across, and deep in the strip it landed on the wrong Page or a blank screen.
+  - Since fix round 2 the double tap zooms at once, and the observed result is centred, like a pinch.
 
 ### Simulator checks
 
@@ -554,7 +560,7 @@ All on the iPhone 17 Pro simulator, iOS 26.5. The test Books were made outside t
 | First appearance | Never changed the Reading Position, in any check above |
 | Switch back to Page by Page from Page 7 | Page by Page showed Page 7 |
 | Pinch | Zoomed about the top centre; panned sideways; no save during the pinch (see fix round 1 for the place inside the Page) |
-| Double tap | Zoomed in (2.5x) and back to fit |
+| Double tap | Zoomed in (2.5x) and back to fit; deep in the strip see fix round 2 |
 | Switching after a zoom | Strip came back at fit |
 | All Pages shorter than the screen | Switching on Page 5 and reopening both put Page 5 at the top; counter "Page 5 of 12" |
 | One-Page Book | Slider disabled; Page 1 at every position, including when pulled past either end |
@@ -621,6 +627,8 @@ Notes on the table:
   - window resizing keeping the reader's place inside the Page;
   - Escape closing the Book.
 - **iPad and iPhone rotation.** Not run. The simulator tools available here cannot turn the device, and turning it from the Simulator app's menu would be input to the Mac.
+
+  Turning the device is an animated change of the strip's width. The limit that broke the animated double tap (fix round 2) may affect it too: a reader deep in the strip might land on the wrong Page after turning the device. This is unchecked and on the owner's list.
 - **Performance on a device.** Apple says to profile on a real device, not the simulator; every number above is from the simulator. Open question for the owner: is a plain stack of 1,000 or more rows smooth enough on a real iPhone?
 - **The HIG for macOS toolbars** says "Make every toolbar item available as a command in the menu bar". There is no Reading Mode menu command; it is outside this task's brief.
 
@@ -656,7 +664,7 @@ Seen on the simulator, at the 600 x 12,000 Page 7 (8,040 points tall at fit):
 
 Nothing was saved during these zooms.
 
-What the reader will notice: zooming keeps the part of the Page they were looking at under the top of the screen. A double-tap zoom-in still lands at the left edge across, while a pinch stays centred.
+What the reader will notice: zooming keeps the part of the Page they were looking at under the top of the screen. Fix round 2 found that this held for a pinch but not for a double tap deep in the strip, and corrected it.
 
 Rotation: not checked (see Not checked).
 
@@ -692,3 +700,45 @@ Before the code: the new geometry tests failed to compile ("extra argument 'disp
 - `./scripts/test.sh macos`: 118 tests passed.
 - `SIMULATOR=F9304E8C-40F4-4962-A836-C10615C7DC16 SKIP_LAUNCH=1 ./scripts/verify.sh`: format, build and test for iOS and macOS, including FolioCore's 90 tests.
 - `./scripts/format.sh --check`: clean.
+
+### Fix round 2: a double tap zooms at once, so it keeps the reader's place deep in the strip
+
+Review found that a double tap far down the strip landed on the wrong Page or a blank screen (ruling 16). Cases seen in Strip Mixed, whose strip is 20,771 points tall at fit:
+
+- **At Page 21.** A double tap showed Page 7 filling the screen at 2.5x, while the counter still read Page 21.
+- **At the end of the strip.** A double tap turned the screen black. A short drag then showed Page 7 and saved it as the Reading Position.
+
+Cause, as far as it can be documented:
+
+- The double tap changed the zoom inside an animation. The strip's new height took effect on screen gradually, but the move that keeps the reader's place was asked for at once.
+- Apple's text for that move, `ScrollPosition.scrollTo(x:y:)`, is: "The scroll view will clamp this value to only scroll to the size of its actual content." At that moment the content was still its unzoomed size. So the move was cut short at the unzoomed strip's last position (about 19,897 points), which at 2.5x is in Page 7.
+- A pinch changes the zoom in small steps without animation, so it was never cut short. My own double-tap check in fix round 1 was made at 7,153 points; its target, 17,884, was under the limit.
+
+Change: the double tap now changes the zoom at once, without animation. No timer, delay or second move was added.
+
+When SwiftUI runs the "zoom changed" action relative to laying out the new size is not something Apple documents. `onChange(of:initial:_:)` says only that the system "may call the action closure on the main actor". That the move lands correctly when the zoom is not animated is observed:
+
+| Where | Before | After | Then |
+|---|---|---|---|
+| Page 21 at the top | Page 21 at fit | 2.5x: Page 21 still at the top, centred across | Back to fit: Page 21 at the top |
+| End of the strip | Top of the screen 64 of 603 points into Page 22 (10.6%) | 2.5x: 160 of 1,507 (10.6%), the Page in view, not blank | Back to fit: the end of the strip again |
+| 57.7% of the way down the 600 x 12,000 Page 7 | 4,640 of 8,040 points | 2.5x: 11,600 of 20,100 (57.7%) | Back to fit: 4,640 |
+
+Pinches from the same places still pass:
+- 2x at the end: 127 of 1,206 into Page 22 (10.5%);
+- 2x at Page 7: 9,280 of 16,080 (57.7%);
+- 2x at Page 20 (the slider stopped one Page short of 21), deep in the strip: Page 20 stays at the top;
+- pinching back returned each to its fit position.
+
+No zoom saved a Reading Position. Every save in the probe log came from my own swipes and slider jumps, and none fell during a zoom. The Library cards afterwards read Page 20, Page 24 and Page 7, the Pages each Book was left on before zooming.
+
+What the reader will notice:
+- The double tap zooms instantly instead of with a short animation.
+- Deep in the strip it keeps the part of the Page they were looking at, like a pinch.
+- It now also lands centred across, where before it lined up with the left edge. That is observed, not something Apple documents.
+
+Rotation is an animated size change too and could not be checked (see Not checked).
+
+Tests: no unit test changed. The change only removes an animation, and the arithmetic it relies on (`StripGeometry.offset(keepingPlaceOf:in:)`) is already covered by `keepingPlace` and `keepingPlaceOnePageAndEmpty`.
+
+Gate: `./scripts/test.sh macos`, then `SIMULATOR=F9304E8C-40F4-4962-A836-C10615C7DC16 SKIP_LAUNCH=1 ./scripts/verify.sh`, and `./scripts/format.sh` followed by `--check`.

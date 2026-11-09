@@ -189,10 +189,11 @@ struct VerticalStripView: View {
         if byReader, page != index { index = page }
     }
 
+    /// Zooms in or back to fit at once, not animated: the strip must already have its new
+    /// size when it is moved to keep the reader's place, because the scroll view clamps a
+    /// move "to only scroll to the size of its actual content" (`ScrollPosition`).
     private func toggleZoom() {
-        withAnimation {
-            scale = scale > 1 ? 1 : PageView.zoomedScale
-        }
+        scale = scale > 1 ? 1 : PageView.zoomedScale
     }
 
     private func makeCache(widthPixels: Int) {
