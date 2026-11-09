@@ -211,6 +211,21 @@ public actor Library {
         }
     }
 
+    /// Changes a Book's Reading Mode. Throws only `LibraryError`, naming
+    /// `.chooseReadingMode`. Choosing the mode the Book already has changes nothing and
+    /// announces nothing.
+    public func chooseReadingMode(
+        bookID: BookID, _ mode: ReadingMode
+    ) async throws(LibraryError) {
+        try await storageGuard(.chooseReadingMode) {
+            var book = try await book(id: bookID, for: .chooseReadingMode)
+            guard book.readingMode != mode else { return }
+            book.readingMode = mode
+            try await books.update(book)
+            continuation.yield(.readingModeChanged(bookID, mode: mode))
+        }
+    }
+
     /// Removes the record first, so a Book is never listed without its folder. A folder
     /// that cannot be deleted is left as an orphan for launch reconciliation and emits
     /// `libraryStorageFailed(.deleteBook)` after `bookRemoved`.

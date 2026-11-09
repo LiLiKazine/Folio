@@ -1,5 +1,6 @@
 import FolioCore
 import Foundation
+import SwiftData
 import Testing
 
 @testable import Folio
@@ -70,6 +71,69 @@ import Testing
 
         try await repository.remove(id: book.id)
         #expect(try await repository.book(id: book.id) == nil)
+    }
+
+    @Test("a Book's Reading Mode roundtrips") func readingModeRoundtrips() async throws {
+        let repository = SwiftDataBookRepository(
+            modelContainer: try LibraryStorage.makeContainer(inMemory: true))
+        var book = makeBook(importedAt: Date(timeIntervalSince1970: 1_000))
+        book.readingMode = .vertical
+
+        try await repository.add(book)
+        #expect(try await repository.book(id: book.id)?.readingMode == .vertical)
+
+        book.readingMode = .pageByPage
+        try await repository.update(book)
+        #expect(try await repository.book(id: book.id)?.readingMode == .pageByPage)
+    }
+
+    @Test("a stored Reading Mode that names no case reads as Page by Page")
+    func unknownReadingModeIsPageByPage() {
+        let model = BookModel(makeBook(importedAt: Date(timeIntervalSince1970: 1_000)))
+
+        model.readingMode = "scroll"
+
+        #expect(model.book.readingMode == .pageByPage)
+    }
+
+    @Test("a store written by the first schema opens in the current one, as Page by Page")
+    func v1StoreOpensAsPageByPage() async throws {
+        // This also passes with no migration stages: it shows the old store opens, not that
+        // the stage is what opens it.
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appending(path: "Library.store", directoryHint: .notDirectory)
+        let id = UUID()
+        let importedAt = Date(timeIntervalSince1970: 1_000)
+
+        do {
+            let v1 = try ModelContainer(
+                for: Schema(versionedSchema: FolioSchemaV1.self),
+                configurations: [
+                    ModelConfiguration(
+                        schema: Schema(versionedSchema: FolioSchemaV1.self), url: storeURL)
+                ])
+            let context = ModelContext(v1)
+            context.insert(
+                FolioSchemaV1.BookModel(
+                    id: id, title: "Old Book", folderName: id.uuidString,
+                    pageFileNames: ["0001.jpg", "0002.jpg"], coverFileName: "cover.jpg",
+                    importedAt: importedAt, lastOpenedAt: nil, readingPosition: 1))
+            try context.save()
+        }
+
+        let repository = SwiftDataBookRepository(
+            modelContainer: try LibraryStorage.makeContainer(at: storeURL))
+        let books = try await repository.allBooks()
+
+        #expect(books.count == 1)
+        #expect(books.first?.id == BookID(id))
+        #expect(books.first?.title == "Old Book")
+        #expect(books.first?.pages.map(\.fileName) == ["0001.jpg", "0002.jpg"])
+        #expect(books.first?.readingPosition == 1)
+        #expect(books.first?.readingMode == .pageByPage)
     }
 
     @Test("allBooks uses Library order") func order() async throws {

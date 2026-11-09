@@ -185,6 +185,17 @@ import Observation
         }
     }
 
+    /// Changes the Book's Reading Mode. Never queues a Notice.
+    func chooseReadingMode(_ id: BookID, _ mode: ReadingMode) async {
+        do {
+            try await library.chooseReadingMode(bookID: id, mode)
+        } catch {
+            // Log-only by the owner's ruling (Reading Mode design, "A failed Reading Mode save is log-only"): the switch itself visibly succeeded.
+            AppLog.library.error(
+                "Could not save the Reading Mode: \(String(describing: error), privacy: .public)")
+        }
+    }
+
     func removeBook(_ id: BookID) async {
         await perform(.deleteBook) { () async throws(LibraryError) in
             try await self.library.removeBook(id: id)
@@ -252,7 +263,7 @@ import Observation
                 queue(Notice(importFailed: sourceName, reason: reason))
                 await reloadAfterNotice("an Import failed")
             }
-        case .bookOpened, .readingPositionChanged:
+        case .bookOpened, .readingPositionChanged, .readingModeChanged:
             break
         case .libraryStorageFailed(let operation):
             queue(Notice(storageFailed: operation))

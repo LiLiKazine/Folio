@@ -15,6 +15,9 @@ final class BookModel {
     var importedAt: Date
     var lastOpenedAt: Date?
     var readingPosition: Int?
+    /// `ReadingMode`'s raw value. Empty for a Book stored before Reading Modes existed;
+    /// a value that names no case also reads as Page by Page.
+    var readingMode: String?
 
     init(_ book: Book) {
         id = book.id.rawValue
@@ -25,6 +28,7 @@ final class BookModel {
         importedAt = book.importedAt
         lastOpenedAt = book.lastOpenedAt
         readingPosition = book.readingPosition
+        readingMode = book.readingMode.rawValue
     }
 
     /// Overwrites every stored field with `book`'s values; `id` is kept.
@@ -36,6 +40,7 @@ final class BookModel {
         importedAt = book.importedAt
         lastOpenedAt = book.lastOpenedAt
         readingPosition = book.readingPosition
+        readingMode = book.readingMode.rawValue
     }
 
     var book: Book {
@@ -47,7 +52,8 @@ final class BookModel {
             coverFileName: coverFileName,
             importedAt: importedAt,
             lastOpenedAt: lastOpenedAt,
-            readingPosition: readingPosition
+            readingPosition: readingPosition,
+            readingMode: readingMode.flatMap(ReadingMode.init(rawValue:)) ?? .pageByPage
         )
     }
 }

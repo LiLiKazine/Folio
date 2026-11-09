@@ -1,18 +1,21 @@
 import FolioCore
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import Folio
 
 @Suite("ReadingView")
 struct ReadingViewTests {
-    private func book(pageCount: Int, readingPosition: Int?) -> Book {
+    private func book(
+        pageCount: Int, readingPosition: Int?, readingMode: ReadingMode = .pageByPage
+    ) -> Book {
         let id = BookID()
         return Book(
             id: id, title: "Vol 1", folderName: id.rawValue.uuidString,
             pages: (1...pageCount).map { Page(fileName: String(format: "%04d.png", $0)) },
             coverFileName: CoverImage.fileName, importedAt: .now, lastOpenedAt: nil,
-            readingPosition: readingPosition)
+            readingPosition: readingPosition, readingMode: readingMode)
     }
 
     @Test(
@@ -43,5 +46,44 @@ struct ReadingViewTests {
         ])
     func decodeSize(windowPixels: Int, expected: Int) {
         #expect(ReadingView.decodeSize(forWindowPixels: windowPixels) == expected)
+    }
+
+    @Test("startMode is the Book's own Reading Mode", arguments: ReadingMode.allCases)
+    func startMode(mode: ReadingMode) {
+        let book = book(pageCount: 3, readingPosition: 1, readingMode: mode)
+
+        #expect(ReadingView.startMode(for: book) == mode)
+    }
+
+    @Test(
+        "The strip's scroll is measured from the top of the content, under any inset the scroll view adds"
+    )
+    func stripScrollMeasuresFromTheContentTop() {
+        // Under an inset the content offset sits before zero at rest at the top
+        // ("may extend before zero ... when the content insets ... are non-zero").
+        let atRest = ScrollGeometry(
+            contentOffset: CGPoint(x: 0, y: -50), contentSize: CGSize(width: 390, height: 3000),
+            contentInsets: EdgeInsets(top: 50, leading: 0, bottom: 0, trailing: 0),
+            containerSize: CGSize(width: 390, height: 800))
+        let scrolled = ScrollGeometry(
+            contentOffset: CGPoint(x: 0, y: 1150), contentSize: CGSize(width: 390, height: 3000),
+            contentInsets: EdgeInsets(top: 50, leading: 0, bottom: 0, trailing: 0),
+            containerSize: CGSize(width: 390, height: 800))
+
+        #expect(StripScroll(atRest) == StripScroll(offset: 0, viewportHeight: 800))
+        #expect(StripScroll(scrolled) == StripScroll(offset: 1200, viewportHeight: 800))
+    }
+
+    @Test(
+        "Only the reader moves the strip in interacting and decelerating; idle, tracking (a finger down that has not moved) and animating are not the reader",
+        arguments: [
+            (phase: ScrollPhase.idle, expected: false),
+            (phase: ScrollPhase.tracking, expected: false),
+            (phase: ScrollPhase.interacting, expected: true),
+            (phase: ScrollPhase.decelerating, expected: true),
+            (phase: ScrollPhase.animating, expected: false),
+        ])
+    func readerScrolling(phase: ScrollPhase, expected: Bool) {
+        #expect(VerticalStripView.isReaderScrolling(phase) == expected)
     }
 }

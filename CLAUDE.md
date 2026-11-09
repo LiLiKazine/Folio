@@ -68,14 +68,14 @@ Xcode applies the flag to package targets directly.
 ## Library and Import code
 
 `FolioCore` is organised by concern. `Domain/` holds the values (Book, Import,
-Reading Position), the Library events, the repository protocols, and in-memory
-repositories for tests. `Source/` scans a folder Source into ordered Pages,
-reads zips on Compression (`ZipArchive`, stored and deflate only), and defines
-the `SourceAccess` port. `Import/` is the atomic `ImportPipeline` (stage, copy
-Pages, render the Cover, move into place), Cover rendering, and the storage
-capacity check. `Library/` is the `Library` actor with its serial Import
-scheduler and launch recovery, the `LibraryItem` values the grid shows, and
-`LibraryLog`.
+Reading Position, Reading Mode), the Library events, the repository protocols,
+and in-memory repositories for tests. `Source/` scans a folder Source into
+ordered Pages, reads zips on Compression (`ZipArchive`, stored and deflate
+only), and defines the `SourceAccess` port. `Import/` is the atomic
+`ImportPipeline` (stage, copy Pages, render the Cover, move into place), Cover
+rendering, and the storage capacity check. `Library/` is the `Library` actor
+with its serial Import scheduler and launch recovery, the `LibraryItem` values
+the grid shows, and `LibraryLog`.
 
 The app target supplies the platform side. `Persistence/` holds the SwiftData
 models and repositories, `LibraryStorage` (the backup-excluded Books directory
@@ -85,9 +85,17 @@ events) and the SwiftUI views, the Mac commands and drop target, and the iPad
 selection bar. `LibraryWindow` is the root of each window: it owns the
 navigation stack's path and every dialog and status line, so a Notice shows
 over whichever screen is on top. `Reading/` holds the open Book: `ReadingView`
-(paging and the Reading Position), `PageView` (zoom and the placeholder),
-`ReadingChrome` (counter and slider), and `PageImage` / `PageImageCache`
-(downsampled decoding, the current Page and one each side).
+(hosts both Reading Modes, the Reading Mode control, the keys and the Reading
+Position), `PageView` (zoom and the placeholder), `ReadingChrome` (counter and
+slider), and `PageImage` / `PageImageCache` (pixel sizes read without decoding;
+Page by Page's downsampled decoding, the current Page and one each side).
+Vertical is `VerticalStripView`, one scroll view over a plain stack of Pages at
+heights fixed before decoding, where only the reader's own scrolling moves the
+Reading Position, and `SlicedPageCache`, an actor that decodes one Page at a
+time at screen width and holds its slices within a byte budget. Their pure
+rules, tested without a screen, are `StripGeometry` (heights on the pixel grid,
+the Page at the top, which Pages to decode, keeping the place on zoom) and
+`SlicedPage` (the decode width and the slicing).
 
 ## Commands
 

@@ -16,20 +16,16 @@ struct PageImageTests {
         return directory
     }
 
+    /// A picture of one colour, `width` x `height` pixels.
+    private func picture(width: Int, height: Int) throws -> CGImage {
+        try PNGFixture.draw(width: width, height: height) { context in
+            context.setFillColor(red: 0.2, green: 0.4, blue: 0.8, alpha: 1)
+            context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        }
+    }
+
     private func writePNG(to url: URL, width: Int = 64, height: Int = 96) throws {
-        let context = try #require(
-            CGContext(
-                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
-        context.setFillColor(red: 0.2, green: 0.4, blue: 0.8, alpha: 1)
-        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        let image = try #require(context.makeImage())
-        let destination = try #require(
-            CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)
-        )
-        CGImageDestinationAddImage(destination, image, nil)
-        #expect(CGImageDestinationFinalize(destination))
+        try PNGFixture.save(try picture(width: width, height: height), to: url)
     }
 
     @Test("decode downsamples a Page to the longer side at most maxPixelSize")
@@ -55,6 +51,48 @@ struct PageImageTests {
         #expect(PageImage.decode(url: notAnImage, maxPixelSize: 48) == nil)
         #expect(
             PageImage.decode(url: directory.appending(path: "gone.png"), maxPixelSize: 48) == nil)
+    }
+
+    @Test(
+        "pixelSize reads a Page's size without decoding it, and is nil for a file that is not an image"
+    )
+    func pixelSize() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let png = directory.appending(path: "0001.png")
+        try writePNG(to: png, width: 64, height: 96)
+        let notAnImage = directory.appending(path: "0002.png")
+        try Data("not a Page".utf8).write(to: notAnImage)
+
+        #expect(PageImage.pixelSize(url: png) == CGSize(width: 64, height: 96))
+        #expect(PageImage.pixelSize(url: notAnImage) == nil)
+        #expect(PageImage.pixelSize(url: directory.appending(path: "gone.png")) == nil)
+    }
+
+    @Test("pixelSize swaps width and height for an orientation that turns the Page a quarter turn")
+    func pixelSizeAppliesOrientation() throws {
+        let directory = try makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let upright = directory.appending(path: "up.jpg")
+        let turned = directory.appending(path: "turned.jpg")
+        try writeJPEG(to: upright, width: 64, height: 96, orientation: .up)
+        try writeJPEG(to: turned, width: 64, height: 96, orientation: .right)
+
+        #expect(PageImage.pixelSize(url: upright) == CGSize(width: 64, height: 96))
+        #expect(PageImage.pixelSize(url: turned) == CGSize(width: 96, height: 64))
+    }
+
+    private func writeJPEG(
+        to url: URL, width: Int, height: Int, orientation: CGImagePropertyOrientation
+    ) throws {
+        let destination = try #require(
+            CGImageDestinationCreateWithURL(
+                url as CFURL, UTType.jpeg.identifier as CFString, 1, nil)
+        )
+        CGImageDestinationAddImage(
+            destination, try picture(width: width, height: height),
+            [kCGImagePropertyOrientation: orientation.rawValue] as CFDictionary)
+        try #require(CGImageDestinationFinalize(destination))
     }
 
     /// Writes `count` Pages and returns their URLs in order.

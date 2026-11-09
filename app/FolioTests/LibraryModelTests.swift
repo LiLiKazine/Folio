@@ -456,6 +456,21 @@ import UniformTypeIdentifiers
         #expect(try await bookRepository.book(id: book.id)?.readingPosition == nil)
     }
 
+    @Test("choosing a Reading Mode whose save fails queues no Notice")
+    func chooseReadingModeFailureQueuesNoNotice() async throws {
+        let bookRepository = FailingBookRepository()
+        let book = makeBook(pageCount: 3)
+        try await bookRepository.add(book)
+        let fixture = try makeFixture(books: bookRepository)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        await bookRepository.fail([.update])
+
+        await fixture.model.chooseReadingMode(book.id, .vertical)
+
+        #expect(fixture.model.notices.isEmpty)
+        #expect(try await bookRepository.book(id: book.id)?.readingMode == .pageByPage)
+    }
+
     @Test("a burst of turns leaves the last position stored, with no Notice")
     func turnPageBurst() async throws {
         let bookRepository = InMemoryBookRepository()
@@ -669,9 +684,9 @@ import UniformTypeIdentifiers
         case .removeImport: await model.removeImport(failed.id)
         case .rename: await model.rename(book.id, to: "Volume One")
         case .deleteBook: await model.removeBook(book.id)
-        case .open, .turnPage, .updateLibrary, .openLibrary:
-            // Open and Turn Page are log-only (reading design), so they have no row here;
-            // their tests below assert that no Notice appears.
+        case .open, .turnPage, .chooseReadingMode, .updateLibrary, .openLibrary:
+            // Open, Turn Page and Choose Reading Mode are log-only (reading designs), so
+            // they have no row here; their tests assert that no Notice appears.
             Issue.record("No operation set up for \(failure.operation.rawValue)")
         }
 

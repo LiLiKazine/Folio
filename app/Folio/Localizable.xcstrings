@@ -99,7 +99,9 @@
         }
       }
     },
+    "Page by Page" : {},
     "Preparing…" : {},
+    "Reading Mode" : {},
     "Remove" : {},
     "Rename Book" : {},
     "Rename…" : {},
@@ -113,6 +115,7 @@
     "This zip can't be read" : {},
     "This zip format isn't supported" : {},
     "Title" : {},
+    "Vertical" : {},
     "Waiting" : {}
   },
   "version" : "1.0"
