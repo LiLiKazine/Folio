@@ -24,4 +24,25 @@ enum PageImage {
         }
         return image
     }
+
+    /// The size in pixels of the Page at `url` as it is shown, with its orientation
+    /// applied (a Page turned a quarter turn has its width and height swapped), read
+    /// without decoding the image; nil when the file is missing or is not an image.
+    static func pixelSize(url: URL) -> CGSize? {
+        guard
+            let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+            let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil)
+                as? [CFString: Any],
+            let width = properties[kCGImagePropertyPixelWidth] as? Int,
+            let height = properties[kCGImagePropertyPixelHeight] as? Int
+        else { return nil }
+        let orientation = (properties[kCGImagePropertyOrientation] as? UInt32)
+            .flatMap(CGImagePropertyOrientation.init(rawValue:))
+        switch orientation {
+        case .left, .leftMirrored, .right, .rightMirrored:
+            return CGSize(width: height, height: width)
+        default:
+            return CGSize(width: width, height: height)
+        }
+    }
 }
