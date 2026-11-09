@@ -60,6 +60,34 @@ struct SlicedPageCacheTests {
         #expect(await cache.decodeCount == 4)
     }
 
+    @Test("the budget holds after every decode, not only after a prefetch")
+    func budgetHoldsAfterEveryDecode() async throws {
+        let directory = try PNGFixture.makeDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let (urls, pageBytes) = try makePages(count: 9, in: directory)
+        let cache = makeCache(urls: urls, pageBytes: pageBytes)
+
+        await cache.retain(top: 0)
+        await cache.prefetch(around: 0)
+        #expect(await cache.heldBytes <= 2 * pageBytes)
+
+        // The reader jumps to Page 5. Decoding what a prefetch decodes, one Page at a time,
+        // the Pages held never exceed the budget by more than the Page just returned.
+        await cache.retain(top: 5)
+        for index in [5, 6, 7, 4] {
+            #expect(await cache.slices(at: index) != nil)
+            #expect(await cache.heldBytes <= 2 * pageBytes + pageBytes)
+        }
+
+        // After a whole prefetch the cache holds the top Page and the next, nothing more.
+        await cache.prefetch(around: 5)
+        #expect(await cache.heldBytes == 2 * pageBytes)
+        let decodes = await cache.decodeCount
+        #expect(await cache.slices(at: 5) != nil)
+        #expect(await cache.slices(at: 6) != nil)
+        #expect(await cache.decodeCount == decodes)
+    }
+
     @Test("retain releases the Pages the reader left behind, oldest used first")
     func retainReleasesOldest() async throws {
         let directory = try PNGFixture.makeDirectory()

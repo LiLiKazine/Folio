@@ -25,6 +25,9 @@ actor SlicedPageCache {
     /// How many decodes have run; lets tests see what the cache kept and what it released.
     private(set) var decodeCount = 0
 
+    /// The bytes of the slices held now.
+    var heldBytes: Int { held.values.reduce(0) { $0 + $1.bytes } }
+
     /// `urls` are the Book's Page files in reading order; `screenWidthPixels` is the
     /// strip's width in pixels. `cacheBudget` defaults to three Pages' worth at
     /// `perPageBudget`.
@@ -40,7 +43,8 @@ actor SlicedPageCache {
 
     /// The slices of the Page at `index`, decoded now if the cache does not hold them; nil
     /// when the index is outside the Book, the Page cannot be decoded, or the calling task
-    /// was cancelled before the decode began.
+    /// was cancelled before the decode began. After each decode the cache releases Pages to
+    /// fit the cache budget, keeping the Page returned and the pair `retain(top:)` named.
     func slices(at index: Int) async -> [CGImage]? {
         guard urls.indices.contains(index) else { return nil }
         if let existing = held[index] {
@@ -54,6 +58,7 @@ actor SlicedPageCache {
         held[index] = Held(
             slices: slices, bytes: slices.map(SlicedPage.bytes(of:)) ?? 0, lastUsed: tick())
         decodeCount += 1
+        applyBudget(keeping: index)
         return slices
     }
 
@@ -64,10 +69,13 @@ actor SlicedPageCache {
         applyBudget()
     }
 
-    /// Decodes the Pages from one before `index` to two after it that exist, then releases
-    /// Pages to fit the cache budget.
+    /// Decodes the Pages from one before `index` to two after it that exist, the Page at
+    /// `index` first so the Page the reader is on is ready soonest. Each decode applies the
+    /// cache budget (see `slices(at:)`), and the last step releases down to the budget with
+    /// only the retained pair kept.
     func prefetch(around index: Int) async {
-        for neighbour in (index - 1)...(index + 2) where urls.indices.contains(neighbour) {
+        for neighbour in [index, index + 1, index + 2, index - 1]
+        where urls.indices.contains(neighbour) {
             _ = await slices(at: neighbour)
         }
         applyBudget()
@@ -90,10 +98,14 @@ actor SlicedPageCache {
         return clock
     }
 
-    private func applyBudget() {
-        var total = held.values.reduce(0) { $0 + $1.bytes }
-        let releasable = held.filter { !retained.contains($0.key) && $0.value.bytes > 0 }
-            .sorted { $0.value.lastUsed < $1.value.lastUsed }
+    /// Releases Pages, least recently used first, until the slices held fit the cache
+    /// budget. Never releases the retained pair or `extra`, the Page being returned.
+    private func applyBudget(keeping extra: Int? = nil) {
+        var total = heldBytes
+        let releasable = held.filter {
+            !retained.contains($0.key) && $0.key != extra && $0.value.bytes > 0
+        }
+        .sorted { $0.value.lastUsed < $1.value.lastUsed }
         for (index, entry) in releasable {
             guard total > cacheBudget else { return }
             held[index] = nil

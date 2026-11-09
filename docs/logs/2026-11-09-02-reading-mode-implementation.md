@@ -201,9 +201,10 @@ of these pieces.
   per-Page budget, never below 1), the decode, and the byte count of a set of
   slices.
 - `Reading/SlicedPageCache.swift` (new): keeps the slices of the Pages read so
-  far, decodes one at a time, and releases the least recently used Pages once
-  the total is over the cache budget, never the Page at the top of the screen or
-  the one after it.
+  far, decodes one at a time, and after every Page it decodes releases the
+  least recently used Pages while the total is over the cache budget, never the
+  Page at the top of the screen, the one after it, or the Page it is handing
+  back. (Fix round 1, below, changed this from "once, after a whole prefetch".)
 - Tests: `StripGeometryTests`, `SlicedPageTests`, `SlicedPageCacheTests`, and
   two new tests in `PageImageTests`. `PNGFixture` (in `SlicedPageTests.swift`)
   writes the small test Pages.
@@ -346,6 +347,43 @@ itself is not misled.
 - A freshly decoded Page is read lazily and slices may cost little while
   untouched (see "observed" above); the budgets and the byte count deliberately
   ignore that.
+
+### Fix round 1: the cache trims after every decode
+
+The first version trimmed the cache only when the reader's top Page changed and
+once at the end of a prefetch. A prefetch decodes up to four Pages, so after a
+jump (the slider, a Page-to-Page switch) the cache briefly held the Pages that
+were already there plus four new ones: about seven Pages' worth of slices
+instead of the three the design allows, roughly 672 MB on an iPhone and 1.8 GB
+on a Mac against a stated limit of 288 MB and 768 MB. The design says memory
+stays within the stated budget however tall the Pages are, and that binding
+sentence wins over the plan's wording ("decodes ... then applies the budget").
+
+What changed, in plain terms:
+
+- The cache now trims after every single Page it decodes. It never lets go of
+  the Page at the top of the screen, the one after it, or the Page it is just
+  about to hand back; anything else goes, least recently used first. At any
+  moment after a call returns, the cache holds at most its budget plus the one
+  Page just returned. At the end of a prefetch it holds only the top Page and
+  the next.
+- A prefetch now decodes the Page the reader is on first, then the next two,
+  then the one before, so the Page being read is ready soonest and a tall Page
+  is not decoded for a neighbour before the one on screen.
+- What a reader may notice: a Page just outside the kept pair can now be
+  released sooner than before, so scrolling back to it a moment later may show
+  its placeholder briefly while it is decoded again. In return, memory stays
+  inside the stated limit.
+- To let a test see this, the cache has a read-only `heldBytes` (the bytes of
+  the slices it holds now).
+
+The new test, `budgetHoldsAfterEveryDecode`, jumps from Page 0 to Page 5 in a
+nine-Page Book with a budget of two Pages, asks for the Pages a prefetch would
+ask for one at a time, and checks after each that the cache holds no more than
+its budget plus one Page; it then checks that a whole prefetch ends holding
+exactly the top Page and the next. It failed against the first version (three
+expectations, one per extra Page held) and passes now. The order of the prefetch
+is not covered by a test of its own.
 
 ### Gate
 
