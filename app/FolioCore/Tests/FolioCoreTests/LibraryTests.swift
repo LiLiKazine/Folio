@@ -514,6 +514,72 @@ struct LibraryTests {
         }
     }
 
+    @Test("chooseReadingMode stores the mode and emits readingModeChanged")
+    func chooseReadingMode() async throws {
+        let fixture = try Fixture()
+        defer { fixture.directory.remove() }
+        let book = Self.book(importedAt: .now)
+        try await fixture.books.add(book)
+
+        try await fixture.library.chooseReadingMode(bookID: book.id, .vertical)
+        let events = await fixture.events(for: .milliseconds(300))
+
+        #expect(events == [.readingModeChanged(book.id, mode: .vertical)])
+        #expect(try await fixture.books.book(id: book.id)?.readingMode == .vertical)
+    }
+
+    @Test("chooseReadingMode with the stored mode announces nothing and writes nothing")
+    func chooseReadingModeUnchanged() async throws {
+        let books = FailingBookRepository()
+        let fixture = try Fixture(books: books)
+        defer { fixture.directory.remove() }
+        let book = Self.book(importedAt: .now)
+        try await books.add(book)
+        // The repositories keep no record of their calls, so a write is detected by
+        // making every update throw: choosing the stored mode must not reach it.
+        await books.fail([.update])
+
+        try await fixture.library.chooseReadingMode(bookID: book.id, .pageByPage)
+        let events = await fixture.events(for: .milliseconds(300))
+
+        #expect(events.isEmpty)
+        #expect(try await books.book(id: book.id)?.readingMode == .pageByPage)
+    }
+
+    @Test("chooseReadingMode on an unknown Book throws notFound(.chooseReadingMode)")
+    func chooseReadingModeUnknownBook() async throws {
+        let fixture = try Fixture()
+        defer { fixture.directory.remove() }
+
+        await #expect(throws: LibraryError.notFound(.chooseReadingMode)) {
+            try await fixture.library.chooseReadingMode(bookID: BookID(), .vertical)
+        }
+    }
+
+    @Test("a Book stored without a Reading Mode decodes as pageByPage")
+    func bookWithoutReadingModeDecodes() throws {
+        let book = Self.book(importedAt: Date(timeIntervalSince1970: 100))
+        var json = try #require(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(book)) as? [String: Any])
+        json["readingMode"] = nil
+
+        let decoded = try JSONDecoder().decode(
+            Book.self, from: JSONSerialization.data(withJSONObject: json))
+
+        #expect(decoded.readingMode == .pageByPage)
+        #expect(decoded == book)
+    }
+
+    @Test("a Book keeps its Reading Mode through encoding")
+    func bookReadingModeRoundTrips() throws {
+        var book = Self.book(importedAt: Date(timeIntervalSince1970: 100))
+        book.readingMode = .vertical
+
+        let decoded = try JSONDecoder().decode(Book.self, from: JSONEncoder().encode(book))
+
+        #expect(decoded.readingMode == .vertical)
+    }
+
     @Test("open sets lastOpenedAt and emits bookOpened")
     func open() async throws {
         let openedAt = Date(timeIntervalSince1970: 1_000_000)

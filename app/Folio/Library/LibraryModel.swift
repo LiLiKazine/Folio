@@ -252,7 +252,7 @@ import Observation
                 queue(Notice(importFailed: sourceName, reason: reason))
                 await reloadAfterNotice("an Import failed")
             }
-        case .bookOpened, .readingPositionChanged:
+        case .bookOpened, .readingPositionChanged, .readingModeChanged:
             break
         case .libraryStorageFailed(let operation):
             queue(Notice(storageFailed: operation))

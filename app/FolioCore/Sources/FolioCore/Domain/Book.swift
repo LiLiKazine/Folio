@@ -24,6 +24,8 @@ public struct Book: Hashable, Codable, Sendable, Identifiable {
     public var lastOpenedAt: Date?
     /// Index into `pages`.
     public var readingPosition: Int?
+    /// How this Book is read. Books stored before Reading Modes existed read Page by Page.
+    public var readingMode: ReadingMode
 
     public init(
         id: BookID,
@@ -33,7 +35,8 @@ public struct Book: Hashable, Codable, Sendable, Identifiable {
         coverFileName: String,
         importedAt: Date,
         lastOpenedAt: Date?,
-        readingPosition: Int?
+        readingPosition: Int?,
+        readingMode: ReadingMode = .pageByPage
     ) {
         self.id = id
         self.title = title
@@ -43,6 +46,21 @@ public struct Book: Hashable, Codable, Sendable, Identifiable {
         self.importedAt = importedAt
         self.lastOpenedAt = lastOpenedAt
         self.readingPosition = readingPosition
+        self.readingMode = readingMode
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(BookID.self, forKey: .id)
+        title = try values.decode(String.self, forKey: .title)
+        folderName = try values.decode(String.self, forKey: .folderName)
+        pages = try values.decode([Page].self, forKey: .pages)
+        coverFileName = try values.decode(String.self, forKey: .coverFileName)
+        importedAt = try values.decode(Date.self, forKey: .importedAt)
+        lastOpenedAt = try values.decodeIfPresent(Date.self, forKey: .lastOpenedAt)
+        readingPosition = try values.decodeIfPresent(Int.self, forKey: .readingPosition)
+        readingMode =
+            try values.decodeIfPresent(ReadingMode.self, forKey: .readingMode) ?? .pageByPage
     }
 }
 
