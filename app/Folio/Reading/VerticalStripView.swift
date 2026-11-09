@@ -40,13 +40,14 @@ struct VerticalStripView: View {
     let onTap: () -> Void
 
     /// Whether `phase` is the reader moving the strip rather than code. Apple describes
-    /// `tracking`, `interacting` and `decelerating` as the user touching, moving or having
-    /// just let go of the scroll view, `idle` as no scrolling, and `animating` as "the
-    /// result of a programmatic scroll", which is not the reader.
+    /// `interacting` as "the user is interacting with the scroll view" and `decelerating` as
+    /// the user having "stopped interacting" while the strip coasts on. `tracking` is a
+    /// finger down where "the user hasn't started a scroll", so a tap is not a scroll; `idle`
+    /// is no scrolling, and `animating` is "the result of a programmatic scroll".
     nonisolated static func isReaderScrolling(_ phase: ScrollPhase) -> Bool {
         switch phase {
-        case .tracking, .interacting, .decelerating: true
-        case .idle, .animating: false
+        case .interacting, .decelerating: true
+        case .idle, .tracking, .animating: false
         @unknown default: false
         }
     }
@@ -63,6 +64,11 @@ struct VerticalStripView: View {
     /// The Pages kept decoded for where the strip is (`StripGeometry.pagesToDecode`); none
     /// before the first report of where the strip is.
     @State private var pagesToDecode = 0..<0
+    /// Where the strip was at the last report, with the geometry it was laid out in; read
+    /// when the width or the zoom changes, to keep the reader's place.
+    @State private var lastReport = LastReport()
+    /// Moves the strip to an exact offset when the width or the zoom changes.
+    @State private var position = ScrollPosition()
     /// The scale the strip rests at; 1 is fit to the screen's width.
     @State private var scale: CGFloat = 1
     /// The scale while a pinch is in progress, relative to `scale`.
@@ -82,7 +88,8 @@ struct VerticalStripView: View {
     /// The strip for a screen `width` points wide.
     private func strip(width: CGFloat) -> some View {
         let pageWidth = width * liveScale
-        let stripGeometry = StripGeometry(pixelSizes: pixelSizes, width: pageWidth)
+        let stripGeometry = StripGeometry(
+            pixelSizes: pixelSizes, width: pageWidth, displayScale: displayScale)
         return ScrollViewReader { proxy in
             ScrollView([.vertical, .horizontal]) {
                 // A plain stack, not a lazy one: Apple documents that a lazy stack "only
@@ -108,6 +115,7 @@ struct VerticalStripView: View {
                     }
                 }
             }
+            .scrollPosition($position)
             // At fit the strip is exactly as wide as the screen; it only moves sideways when
             // zoomed.
             .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
@@ -131,9 +139,17 @@ struct VerticalStripView: View {
                 guard index != topPage else { return }
                 proxy.scrollTo(index, anchor: .top)
             }
-            // A new width (the window resized, the screen turned, a zoom) moves every Page
-            // below the top, so the Page being read is brought back to the top.
-            .onChange(of: stripGeometry) { proxy.scrollTo(index, anchor: .top) }
+            // A new width (the window resized, the screen turned, a zoom) changes every
+            // Page's height, so the strip is moved to the same place inside the Page under the
+            // top of the screen, centred across.
+            .onChange(of: stripGeometry) { _, newGeometry in
+                guard let scroll = lastReport.scroll, let reported = lastReport.geometry else {
+                    return
+                }
+                position.scrollTo(
+                    x: (pageWidth - width) / 2,
+                    y: newGeometry.offset(keepingPlaceOf: scroll.offset, in: reported))
+            }
             .contentShape(.rect)
             .gesture(
                 TapGesture(count: 2).onEnded { toggleZoom() }
@@ -162,6 +178,8 @@ struct VerticalStripView: View {
     /// Code moving the strip (opening, a jump, a new width) never changes the Page being
     /// read this way.
     private func follow(_ scroll: StripScroll, in stripGeometry: StripGeometry, byReader: Bool) {
+        lastReport.scroll = scroll
+        lastReport.geometry = stripGeometry
         let window = stripGeometry.pagesToDecode(
             offset: scroll.offset, viewportHeight: scroll.viewportHeight)
         if window != pagesToDecode { pagesToDecode = window }
@@ -181,6 +199,14 @@ struct VerticalStripView: View {
         cache = SlicedPageCache(urls: pageURLs, screenWidthPixels: widthPixels)
         cacheWidthPixels = widthPixels
     }
+}
+
+/// Where the strip was at the last report of its scroll view, and the geometry it was laid
+/// out in. A reference, so that noting it on every frame of scrolling does not redraw the
+/// strip; nothing on screen shows it.
+private final class LastReport {
+    var scroll: StripScroll?
+    var geometry: StripGeometry?
 }
 
 /// The Page at the top, for the cache in use.

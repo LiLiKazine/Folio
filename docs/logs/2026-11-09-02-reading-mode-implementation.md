@@ -415,6 +415,7 @@ The terms below are used in this section.
   - animating: code is scrolling with an animation.
 - **A plain stack** works out where every row sits before anything is shown. **A lazy stack** works out a row's place only when that row comes near the screen, and guesses for the rest.
 - **The Pages kept decoded** are the Pages the strip asks the cache for at a given moment: every Page with any part on screen, plus one more on each side.
+- **The pixel grid** is the screen's own dots. On an iPhone with 3 pixels per point, a scroll view comes to rest only on whole pixels, which are thirds of a point.
 
 ### What Changed
 
@@ -422,8 +423,11 @@ The terms below are used in this section.
   - It is a scroll view that moves down, and sideways only when zoomed. Inside it is a plain stack of rows, one per Page. Each row is exactly as tall as the Page's pixel size gives at the screen's width; a Page whose file is not an image is a square.
   - A row among the Pages kept decoded shows that Page's slices from the cache, or the placeholder if the Page cannot be decoded. Any other row shows nothing and does not ask the cache.
   - The strip keeps its own cache of slices. It is rebuilt when the screen's width in pixels changes, and it is told the Page at the top so its budget never lets go of that Page or the next.
-  - Zoom works as it does on a single Page: pinch, double tap to zoom in and to go back to fit, letting go below fit snaps back. Zooming brings the Page being read back to its top.
-- **`Reading/StripGeometry.swift`:** `pagesToDecode(offset:viewportHeight:)` gives the Pages kept decoded for a scroll position.
+  - Zoom works as it does on a single Page: pinch, double tap to zoom in and to go back to fit, letting go below fit snaps back. Zooming, and any other change of the screen's width, keeps the reader at the same place inside the Page under the top of the screen (fix round 1).
+- **`Reading/StripGeometry.swift`:**
+  - `pagesToDecode(offset:viewportHeight:)` gives the Pages kept decoded for a scroll position.
+  - `offset(keepingPlaceOf:in:)` gives, for a new width or zoom, the position that keeps the reader the same fraction of the way down the Page under the top of the screen.
+  - Every Page's height is now rounded to the screen's pixel grid; the display scale is passed in (fix round 1).
 - **`Reading/ReadingView.swift`:**
   - The screen holds the Reading Mode, starting from the Book's own (`startMode(for:)`), and shows the pager or the strip accordingly. A switch gives the content a new identity, which resets zoom.
   - Choosing a mode changes the screen at once and asks the model to save the choice afterwards. A failed save stays log-only, in the model (Task 2).
@@ -441,7 +445,7 @@ The terms below are used in this section.
 Each time the strip moves, the scroll view reports two numbers: how far the strip is scrolled, measured from the top of the first Page, and how tall the visible area is. From these:
 
 1. **The Pages kept decoded are worked out on every report.**
-2. **The Page at the top is worked out on every report, but it becomes the Page being read only while the scroll phase says the reader is moving the strip** (tracking, interacting or decelerating; ruling 10). Every Page the reader scrolls onto is saved once, through the model's `turnPage`, as with a swipe in Page by Page.
+2. **The Page at the top is worked out on every report, but it becomes the Page being read only while the scroll phase says the reader is moving the strip**: interacting or decelerating (ruling 10 as amended by ruling 13). Tracking, a finger down that has not moved, does not count, so a tap never changes the Page. Every Page the reader scrolls onto is saved once, through the model's `turnPage`, as with a swipe in Page by Page.
 
    The opening, a switch, the slider and the keys set the Page being read directly. The scroll view's own reports while it is being put in place never change it. This is what stopped a Book from opening on Page 1: the scroll view reports the top of the strip once, before the jump, and that report used to overwrite the Reading Position.
 3. **When the reader starts or stops moving the strip, the phase change also carries the strip's position**, so the Page they stop on is never missed.
@@ -450,7 +454,7 @@ Each time the strip moves, the scroll view reports two numbers: how far the stri
    The "not already at the top" part is the one check the brief asked for, and it is still needed. Every Page the reader scrolls onto comes back to the strip as a change of the Page being read. Without the check, the strip would then pull that Page's top up to the top of the screen while the reader is still scrolling.
 
    It used to compare with "the Page the rule last reported". It now compares with the Page at the top at the last report, because the old form could go stale after a slider jump and then skip a later jump.
-5. **When the screen's width or the zoom changes, the strip jumps back to the top of the Page being read**, because every Page below it moves.
+5. **When the screen's width or the zoom changes, every Page's height changes.** The strip then moves to the same place inside the Page under the top of the screen: the same fraction of the way down that Page, centred across (fix round 1). The Page being read does not change.
 
 ### Why a plain stack (ruling 12)
 
@@ -492,7 +496,12 @@ All fetched on 2026-11-09 from `developer.apple.com/tutorials/data/documentation
   - `decelerating`: "The decelerating phase where the user use has stopped interacting with the scroll view and the scroll view is decelerating towards its final target."
   - `animating`: "The animating phase where the scroll view is animating towards a final target." Also: "This phase is the result of a programmatic scroll when using a ScrollViewReader or scrollPosition(id:anchor:) modifier."
 
-  Because Apple ties `animating` to programmatic scrolls, it does not count as the reader. Apple's text says nothing about which Mac input (wheel, trackpad, Page Up and Page Down, the arrow keys) gives which phase.
+  Only `interacting` and `decelerating` count as the reader:
+  - `tracking` is, in Apple's words, when "the user hasn't started a scroll", so a tap or a finger resting on the screen is not scrolling;
+  - Apple ties `animating` to programmatic scrolls.
+
+  Apple's text says nothing about which Mac input (wheel, trackpad, Page Up and Page Down, the arrow keys) gives which phase.
+- **`ScrollPosition.scrollTo(x:y:)`** ("Scrolls the position of the scroll view to the x and y value you provide." and "The scroll view will clamp this value to only scroll to the size of its actual content.") with **`scrollPosition(_:anchor:)`** ("Use this modifier to control where a scroll view is positioned. You can use the ScrollPosition type to scroll in a variety of ways: ... scroll to a concrete offset"). This is how the strip keeps the reader's place after a zoom. Jumps to a Page still use `scrollTo(_:anchor:)`.
 - **`ScrollViewProxy.scrollTo(_:anchor:)`:**
   - "Scans all scroll views contained by the proxy for the first with a child view with identifier `id`, and then scrolls to that view."
   - "setting `anchor` to top aligns the top of the identified view to the top of the scroll view."
@@ -523,7 +532,7 @@ All on the iPhone 17 Pro simulator, iOS 26.5, driven by an automation tool that 
 - **With the strip under the whole screen (ignoring the safe area), the top and bottom insets were 0**, so the visible rectangle's height (874 points) is the visible area.
 - **Jumps land on the Page's top to within the screen's pixel grid.** The scroll view stops on thirds of a point: Page 9's top is 12,629.5 and the strip stopped at 12,629.667. Because only the reader's scrolling changes the Page being read, this rounding cannot move the counter.
 - **A strip shorter than the screen is centred vertically.** The one-Page Book's Page sits 135 points down. Nothing in the spec asks otherwise, so nothing was added.
-- **A double-tap zoom lands at the left edge of the zoomed strip.** A pinch zoom stays centred. Zooming in either way brings the Page being read back to its top.
+- **A double-tap zoom lands at the left edge of the zoomed strip.** A pinch zoom stays centred. Vertically, both keep the reader's place (fix round 1).
 
 ### Simulator checks
 
@@ -544,7 +553,7 @@ All on the iPhone 17 Pro simulator, iOS 26.5. The test Books were made outside t
 | Reopen a Book saved at Page 24 | Strip ended exactly at its bottom (scrolled to 19,896 + 874 = 20,770) |
 | First appearance | Never changed the Reading Position, in any check above |
 | Switch back to Page by Page from Page 7 | Page by Page showed Page 7 |
-| Pinch | Zoomed about the top centre with Page 7's top kept at the top; panned sideways; no save during the pinch |
+| Pinch | Zoomed about the top centre; panned sideways; no save during the pinch (see fix round 1 for the place inside the Page) |
 | Double tap | Zoomed in (2.5x) and back to fit |
 | Switching after a zoom | Strip came back at fit |
 | All Pages shorter than the screen | Switching on Page 5 and reopening both put Page 5 at the top; counter "Page 5 of 12" |
@@ -583,7 +592,7 @@ Notes on the table:
 - **`ReadingViewTests`:**
   - `startMode` is the Book's own Reading Mode;
   - the strip's scroll is measured from the top of the content under an inset;
-  - only tracking, interacting and decelerating count as the reader.
+  - only interacting and decelerating count as the reader; idle, tracking and animating do not (fix round 1).
 
 ### What Was Discovered
 
@@ -609,9 +618,77 @@ Notes on the table:
   - Vertical scrolling with the wheel and the trackpad;
   - left and right arrows turning Pages in both modes;
   - does the counter follow Page Up, Page Down and the up and down arrows in Vertical? Apple does not say which phase keyboard scrolling reports. If it is not one of the reader's phases, the counter would stay put while the keys scroll.
-  - window resizing keeping the Page being read at the top;
+  - window resizing keeping the reader's place inside the Page;
   - Escape closing the Book.
-- **iPad and iPhone rotation.** Not run.
+- **iPad and iPhone rotation.** Not run. The simulator tools available here cannot turn the device, and turning it from the Simulator app's menu would be input to the Mac.
 - **Performance on a device.** Apple says to profile on a real device, not the simulator; every number above is from the simulator. Open question for the owner: is a plain stack of 1,000 or more rows smooth enough on a real iPhone?
-- **A Page whose top does not fall on the screen's pixel grid, reached by the reader's own scrolling, exactly at the moment it touches the top.** Only jumps were seen landing on thirds of a point.
 - **The HIG for macOS toolbars** says "Make every toolbar item available as a command in the menu bar". There is no Reading Mode menu command; it is outside this task's brief.
+
+### Fix round 1: only the reader's scrolling counts, the place inside a Page is kept, Page heights sit on the pixel grid
+
+Review found three defects. Rulings 13, 14 and 15 settled them.
+
+**1. A tap could change the Reading Position (ruling 13).**
+
+Defect: "tracking" counted as the reader moving the strip. Apple describes tracking as the moment "the user hasn't started a scroll".
+
+Example: a Book reopened on Page 11 of 12 rests at the end of the strip, where the rule says Page 12. A tap there could have saved Page 12.
+
+Change: only interacting and decelerating count now.
+
+Seen on the simulator: with the counter on Page 11 at the end of the strip, four taps and a one-second press without moving left the counter on Page 11, and nothing was saved. Taps and presses showed no phase change at all on the simulator, so tracking itself was never seen there. The fix rests on Apple's text.
+
+**2. Zooming inside a tall Page threw the reader back to the Page's top (ruling 14).**
+
+Defect: every pinch step, rotation or window resize scrolled to the top of the Page being read. Zooming in the middle of a 600 x 12,000 Page was unusable.
+
+Change: the strip now remembers where the last report put it, and in which geometry. When the width or zoom changes it moves, through `ScrollPosition.scrollTo(x:y:)`, to the same fraction of the way down the Page under the top of the screen in the new geometry, centred across. The fraction arithmetic is the pure `StripGeometry.offset(keepingPlaceOf:in:)`.
+
+Seen on the simulator, at the 600 x 12,000 Page 7 (8,040 points tall at fit):
+
+| Step | Top of the screen inside Page 7 |
+|---|---|
+| Before zooming | 2,731 points down (34%) |
+| After a 2x pinch | 5,461 of 16,080 points (34%) |
+| After pinching back | 2,731 points again |
+| After a 2.5x double tap | 6,828 of 20,100 points (34%) |
+| After double tap back to fit | 2,731 points |
+
+Nothing was saved during these zooms.
+
+What the reader will notice: zooming keeps the part of the Page they were looking at under the top of the screen. A double-tap zoom-in still lands at the left edge across, while a pinch stays centred.
+
+Rotation: not checked (see Not checked).
+
+**3. A jump could land just above a Page's top, and the next jump back was lost (ruling 15).**
+
+Defect: Page heights were not on the pixel grid, so a Page's top could fall between pixels while the scroll view stops on whole pixels.
+
+Reproduced first on the committed code, with a generated Book of twelve 1,000 x 1,001 Pages (402.402 points tall each):
+1. The slider jump to Page 6 (top 2,012.010) stopped at 2,012.000.
+2. The rule then read Page 5 at the top.
+3. A slider step back to Page 5 was swallowed by the "already at the top" check. The counter read "Page 5 of 12" while Page 6 was at the top.
+
+Change: `StripGeometry` now takes the display's pixels per point and rounds every Page's height to a whole number of screen pixels. Its tops and the strip's height are counted in whole pixels, so every top lies on the grid where the scroll view stops.
+
+Seen on the simulator with the fix:
+- the jump to Page 6 stopped at 2,011.667, exactly its top, and read Page 6;
+- the step back to Page 5 jumped to 1,609.333, its top, and showed Page 5.
+
+What the reader will notice: nothing, except that this mismatch no longer happens. Each Page is at most half a pixel taller or shorter than before.
+
+**Tests**
+
+- `StripGeometryTests.pixelGrid` (at 2 and 3 pixels per point): every height and top is on the grid; the first height is within half a pixel of the exact one; a non-image Page is a square; tops, heights and the strip's height agree to the pixel; a top reads its own Page and one pixel above reads the Page before.
+- `StripGeometryTests.keepingPlace`: zoom in; zoom out; the first Page; the last Page; past either end.
+- `StripGeometryTests.keepingPlaceOnePageAndEmpty`: a one-Page strip and an empty strip.
+- The Task 3 geometry tests now pass a display scale of 1. Their heights are whole numbers, so nothing else changed.
+- `ReadingViewTests.readerScrolling`: tracking is not the reader.
+
+Before the code: the new geometry tests failed to compile ("extra argument 'displayScale' in call"). With the geometry done but the phase rule not yet changed, the phase test failed for `tracking`.
+
+**Gate**
+
+- `./scripts/test.sh macos`: 118 tests passed.
+- `SIMULATOR=F9304E8C-40F4-4962-A836-C10615C7DC16 SKIP_LAUNCH=1 ./scripts/verify.sh`: format, build and test for iOS and macOS, including FolioCore's 90 tests.
+- `./scripts/format.sh --check`: clean.

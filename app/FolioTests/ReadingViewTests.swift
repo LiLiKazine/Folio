@@ -75,10 +75,10 @@ struct ReadingViewTests {
     }
 
     @Test(
-        "Only the reader moves the strip in tracking, interacting and decelerating; idle and animating are not the reader",
+        "Only the reader moves the strip in interacting and decelerating; idle, tracking (a finger down that has not moved) and animating are not the reader",
         arguments: [
             (phase: ScrollPhase.idle, expected: false),
-            (phase: ScrollPhase.tracking, expected: true),
+            (phase: ScrollPhase.tracking, expected: false),
             (phase: ScrollPhase.interacting, expected: true),
             (phase: ScrollPhase.decelerating, expected: true),
             (phase: ScrollPhase.animating, expected: false),

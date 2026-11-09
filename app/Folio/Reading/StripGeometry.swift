@@ -9,22 +9,26 @@ struct StripGeometry: Equatable, Sendable {
     /// The height of the whole strip.
     let contentHeight: CGFloat
 
-    /// Heights in points at `width`; a nil pixel size is a square of `width`. A pixel size
-    /// with no area cannot give a height, so it is a square too.
-    init(pixelSizes: [CGSize?], width: CGFloat) {
-        let heights = pixelSizes.map { size -> CGFloat in
-            guard let size, size.width > 0, size.height > 0 else { return width }
-            return width * size.height / size.width
+    /// Heights in points at `width` on a screen of `displayScale` pixels per point; a nil
+    /// pixel size is a square of `width`. A pixel size with no area cannot give a height, so
+    /// it is a square too. Each height is rounded to the nearest whole screen pixel, so every
+    /// Page's top lies on the screen's pixel grid, where the scroll view comes to rest.
+    init(pixelSizes: [CGSize?], width: CGFloat, displayScale: CGFloat) {
+        let heightsInPixels = pixelSizes.map { size -> Int in
+            guard let size, size.width > 0, size.height > 0 else {
+                return Int((width * displayScale).rounded())
+            }
+            return Int((width * size.height / size.width * displayScale).rounded())
         }
         var tops: [CGFloat] = []
-        var running: CGFloat = 0
-        for height in heights {
-            tops.append(running)
+        var running = 0
+        for height in heightsInPixels {
+            tops.append(CGFloat(running) / displayScale)
             running += height
         }
-        self.heights = heights
+        self.heights = heightsInPixels.map { CGFloat($0) / displayScale }
         self.tops = tops
-        self.contentHeight = running
+        self.contentHeight = CGFloat(running) / displayScale
     }
 
     /// The Page at the top of the screen: the last Page whose top is at or above `offset`.
@@ -57,6 +61,19 @@ struct StripGeometry: Equatable, Sendable {
         // The last Page whose top is above the bottom of the visible area.
         let lastOnScreen = max(firstIndex { tops[$0] >= offset + viewportHeight } - 1, 0)
         return max(firstOnScreen - 1, 0)..<(min(lastOnScreen + 1, last) + 1)
+    }
+
+    /// The offset in this strip that keeps the reader at the same place as `offset` does in
+    /// `previous` (the same Pages at another width or zoom): the same fraction of the way
+    /// down the Page under the top of the screen. Pulled past either end, it is that end of
+    /// the strip. A strip of other Pages has no same place, so it is 0.
+    func offset(keepingPlaceOf offset: CGFloat, in previous: StripGeometry) -> CGFloat {
+        guard !tops.isEmpty, previous.tops.count == tops.count, offset > 0 else { return 0 }
+        guard offset < previous.contentHeight else { return contentHeight }
+        // The Page under the top of the screen: the last one whose top is at or above it.
+        let page = previous.firstIndex { previous.tops[$0] > offset } - 1
+        let fraction = (offset - previous.tops[page]) / previous.heights[page]
+        return tops[page] + fraction * heights[page]
     }
 
     /// The first Page for which `isPast` holds, or the Page count when none does. `isPast`
