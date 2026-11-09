@@ -1,7 +1,9 @@
 # 2026-11-09-02: Reading Mode — implementation
 
 **Status:** Implemented; the owner's manual checks are pending. Nothing on the
-Mac, on an iPad or on a real device has been checked.
+Mac or on an iPad has been checked. On a real iPhone the owner has so far tried
+a pinch deep in a Book of real pages, which flashed black; that is fixed (see
+"Fix on a real iPhone: the black flash while pinching").
 
 ## Summary
 
@@ -85,7 +87,7 @@ and any Book of landscape pictures, will do as well.
 9. In Vertical press the up and down arrow keys, then Page Up and Page Down, and note whether the strip scrolls at all and, if it does, whether the counter follows (nothing in the app passes these keys to the strip, the reading screen holds the keyboard, and Apple does not say whether keyboard scrolling counts as the reader scrolling).
 10. Press Escape while reading in Vertical: the Book closes.
 11. While part-way down a tall Page in Vertical, drag the window's edge to make it wider and narrower: the part of the Page you were looking at stays at the top of the window, the Pages are sharp again when you stop, and note whether the resize stutters (the Pages are decoded again, one at a time, at every new width while you drag).
-12. In the middle of a tall Page, pinch on the trackpad and then double-click: the part you were looking at stays at the top of the window, the strip is centred left to right, and a second double-click goes back to fit.
+12. In the middle of a tall Page, pinch on the trackpad and then double-click: while you pinch the picture grows from the top centre of the window; when you let go the strip settles without a jump, the part you were looking at stays at the top of the window and the strip is centred left to right; a second double-click goes back to fit.
 13. Scroll to the very end of a Vertical Book, close it and reopen it: the strip ends exactly at the bottom of the last Page.
 14. With a Library made by the previous version of Folio (for example a build of the main branch from before this work), run this version over it without deleting the app's data: every Book is still there with its Cover, its card shows the same "Page n of N" as before, and each Book opens Page by Page.
 15. Open a Book whose first Page is tall (Strip Mixed will do) in Vertical at the very top of the strip, then drag the window's edge to make it wider and narrower: the Pages that come into view appear without scrolling, and the app keeps responding while you drag.
@@ -102,7 +104,7 @@ and any Book of landscape pictures, will do as well.
 6. On a real iPhone, scroll slowly through a very tall Page: it is sharp all the way down, with no visible join between its bands, and scrolling stays smooth; if you run Folio from Xcode, note the memory its gauge shows while that Page is on screen (no figure from a device exists yet).
 7. While on any Page in Vertical, choose "Page by Page": the same Page is shown. Seen on the simulator.
 8. Deep in a long Vertical Book (past Page 20 of Strip Mixed), turn the phone sideways and back: you stay on the same Page at the same place in it (not checked; turning is an animated size change, and an animated zoom once landed the reader on the wrong Page, possibly for the same reason).
-9. On a real iPhone, in the middle of a tall Page, pinch while also moving your two fingers, then pinch to zoom out past fit: the part you were looking at stays under the top of the screen while you pinch, and zooming out stops at fit, so the strip never becomes narrower than the screen (a plain pinch was seen on the simulator; moving while pinching and zooming out past fit were not).
+9. On a real iPhone, deep in a Book of real pages, pinch in and out, also while moving your two fingers, then pinch to zoom out past fit: nothing flashes black; while you pinch the picture grows or shrinks from the top centre of the screen; when you let go the strip settles without a jump, with the part under the top of the screen still there; zooming out stops at fit, so the strip never becomes narrower than the screen. (A plain pinch was seen on the simulator after the fix; moving while pinching and a real iPhone were not.)
 10. Zoom in, pan sideways to one edge, then pinch or double tap again: the strip goes back to the middle, left to right, on every zoom step (known and expected; say if it gets in the way).
 11. Deep in the strip, double tap: it zooms in at once, without an animation, centred and at the same place, and a second double tap goes back to fit. Seen on the simulator.
 12. On a real iPhone, open a Book of 1,000 or more Pages in Vertical and scroll fast for a long way: the blank moment before the strip appears is short, scrolling stays smooth, and the system does not close the app for using too much memory (on the simulator: 0.06 to 0.22 s before the strip appeared, and 67 MB after a long scroll).
@@ -565,7 +567,8 @@ The terms below are used in this section.
   - Zoom uses the same gestures and limits as a single Page: a pinch up to 5 times; a double tap to 2.5 times and again back to fit; a pinch to zoom out stops at fit, so the strip is never narrower than the screen. (The design says letting go below fit snaps back; as on a single Page, the code holds the zoom at fit during the pinch, so there is nothing to snap back.) It zooms the whole strip, and the reader will notice three differences from a single Page:
     - zooming, and any other change of the screen's width, keeps the reader at the same place inside the Page under the top of the screen (fix round 1);
     - a double tap zooms at once, without the animation a single Page uses (fix round 2);
-    - on every zoom step the strip is centred across, so a reader who had panned sideways is put back in the horizontal middle.
+    - on every zoom step the strip is centred across, so a reader who had panned sideways is put back in the horizontal middle;
+    - while the fingers pinch, the strip is only drawn larger or smaller, about the top centre of the screen; it is laid out at the new scale once, when the fingers lift (the fix on a real iPhone, below).
 - **`Reading/StripGeometry.swift`:**
   - `pagesToDecode(offset:viewportHeight:)` gives the Pages kept decoded for a scroll position.
   - `offset(keepingPlaceOf:in:)` gives, for a new width or zoom, the position that keeps the reader the same fraction of the way down the Page under the top of the screen.
@@ -1167,6 +1170,109 @@ The reviewer listed some things it did not judge. The controller ruled on each:
 - Turning an iPhone or iPad while reading Vertical.
 - Anything on an iPad or a real device.
 
+## Fix on a real iPhone: the black flash while pinching
+
+The owner's first check on a real iPhone, deep in a Book of real comic pages
+read Vertical: while pinching in or out the screen went black for a flash and
+came back by itself, before the fingers lifted. No simulator showed it: an
+iPhone 17 Pro on iOS 26.5 and an iPhone 17 on iOS 27.2, light and dark, Strip
+Short at the top and Strip Mixed at Page 20, slow and fast pinches, recorded at
+30 frames a second, never had a dark frame.
+
+### What the log showed
+
+Temporary logging of every scroll report, every phase change and every change
+of the Pages kept decoded, during a fast pinch out and back at Page 20 of Strip
+Mixed (iPhone 17 Pro simulator), with the strip 20,771 points tall at fit:
+
+- A pinch changed the zoom on every frame, so the strip was laid out at a new
+  size on every frame, and after each one the strip asked the scroll view to
+  move to the place that keeps the reader's position.
+- Between those moves the scroll view reported geometries that mixed the **new
+  content height with a position from before**. Zooming out from 82,043 to
+  74,832 points: a report of 74,832 high at 71,986, then a move to 65,658; next
+  step, 68,028 high, a report at 65,658, then one at **71,986 again**, then the
+  asked-for 59,689. The same shape at every step: 61,226 high at 67,812; 54,422
+  at 61,121; 47,621 at 54,353, and so on, each stale position past the end of
+  the shorter strip.
+- Read in the new geometry, a position past the end means the end-of-strip
+  rule: the Pages kept decoded became `22..<24` for a frame, so the rows for
+  Pages 19 to 21 were dropped and asked for again when the next report put the
+  window back at `18..<21`. On the simulator the cache answered at once; on a
+  phone with real pages the slices had been let go (the cache keeps only the
+  Page at the top and the next through the budget) and had to be decoded again,
+  long enough to see as black.
+- At the first touch of the pinch the scroll phase went `idle -> interacting`
+  with the same kind of stale geometry (74,832 high at 71,986), and because
+  `interacting` counts as the reader's scrolling, the Page being read became
+  Page 22 and, a report later, Page 20 again: two Reading Position saves for a
+  pinch that moved nothing. The Library card of Strip Mixed read Page 22 after
+  the experiments, so one of those flicks was the last save.
+
+Where the stale positions come from is inside SwiftUI's scroll view and not
+documented; the positions are not ones the strip asked for. What is documented
+is enough to avoid them: `scaleEffect` "scales this view's rendered output",
+and a rendered scale changes no Page's height, so the scroll view has nothing to
+settle.
+
+### A hypothesis that failed first
+
+Asking for the move in the same update that changes the size (from the
+magnify gesture's `onChanged`, instead of `onChange(of:)` after the size has
+taken effect) did not help: the same stale reports came, and the first-touch
+flick still moved the Page being read to Page 22.
+
+### What changed
+
+The owner chose "scale live, settle on release" over keeping the live re-layout
+with a guard on the reports.
+
+- `VerticalStripView`: the strip is laid out at `scale`, the scale the last
+  pinch ended at. While the fingers pinch, the stack of Pages gets
+  `scaleEffect(liveScale / scale, anchor:)`; nothing is re-laid, no move is
+  asked for, no report arrives. When the fingers lift, `scale` changes once, and
+  the existing "new width" path lays the strip out at the new size and moves it
+  to keep the place under the top of the screen, centred across, exactly as a
+  double tap does.
+- The pinch grows the strip about the top centre of the screen
+  (`pinchAnchor(scroll:viewportWidth:contentWidth:contentHeight:)`, a pure
+  rule): the point the settle keeps. So letting go does not move what is on
+  screen, apart from the horizontal re-centring a reader who had panned
+  sideways already gets on every zoom step (check item 10).
+- `StripScroll` gained the sideways offset (`offsetX`, from
+  `ScrollGeometry.contentOffset.x` plus the leading inset), which the anchor
+  needs when the strip is zoomed and panned.
+
+What the reader will notice: while pinching, the strip grows or shrinks like a
+photo from the top centre of the screen, slightly soft until the fingers lift,
+when it is laid out sharp at the new size with no jump. Zoom in and out no
+longer flash black, and a pinch no longer saves a Reading Position.
+
+### Checked after the fix
+
+iPhone 17 Pro simulator, iOS 26.5, Strip Mixed opened at Page 22 (the Page the
+flick had saved), pinch out to about 3x and back to fit, recorded at 30 frames
+a second: every frame kept the Pages (no frame darker than the rest); after the
+pinch the strip read Page 22 of 24 with Page 23 under it, as before; the
+Library card still read Page 22. A screenshot at 3x showed the top of Page 22
+at the top of the screen, as the anchor rule says.
+
+Not checked: a real iPhone (check item 9 is updated for the owner), a pinch
+with moving fingers, the Mac trackpad (check items 12 and 16).
+
+### Tests
+
+- `stripScrollMeasuresFromTheLeftEdge`: the sideways offset is measured from
+  the strip's left edge under a leading inset.
+- `pinchAnchorIsTheScreensTopCentre`: at fit and the top the anchor is the
+  strip's top centre; zoomed, scrolled and panned it is the point under the
+  screen's top centre; a strip with no size gives the top centre.
+
+### Gate
+
+`SIMULATOR=F9304E8C-40F4-4962-A836-C10615C7DC16 ./scripts/verify.sh` (format,
+build, test, run with a screenshot, every platform).
+
 ## Memory for tall Pages
 
 Measured in Tasks 3 and 4; nothing here was measured on a device. The plan's fresh measurement of an 800 x 12,000 sample Page in a Book was not repeated in Task 5: the 800 x 12,000 figures below are Task 3's decoded sizes on the Mac, the on-screen figures are Task 4's for a 600 x 12,000 Page on the iPhone simulator, and a measurement on a device is on the check list (iPhone items 6 and 12). *Slices held* is the cache's own count of the bytes of the bands it keeps (rows times bytes per row). *The app's memory* is what `footprint` reports. A MB here is 1,048,576 bytes, the unit the budgets are set in, so 96 MB is 100,663,296 bytes.
@@ -1315,4 +1421,5 @@ Noted by the implementers; the controller ruled on each after the final review (
 | 4d01b80 | docs(reading): record the Reading Mode rulings and the owner's check list |
 | 049b9fb | docs(reading): correct the owner's check list and label observed behaviour as observed |
 | 36a035e | fix(reading): one decode cache for the strip, a fresh decode window after every size change, no bounce on a one-screen Book |
-| (this) | docs(reading): record the final review, the last three rulings and the extra check items |
+| 4d51a8e | docs(reading): record the final review, the last three rulings and the extra check items |
+| (this) | fix(reading): a pinch scales the strip on screen and lays it out once the fingers lift, so nothing flashes black |

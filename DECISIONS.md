@@ -676,7 +676,13 @@ under the top of the screen: the same fraction of the way down that Page. The
 plan jumped back to the Page's top instead, which made zooming in the middle of
 a tall Page unusable. Across, the strip is put back in the middle on every zoom
 step, so a reader who had panned to one side of a zoomed Page is brought back to
-the middle when they pinch or double tap again.
+the middle when they pinch or double tap again. While the fingers pinch, the
+strip is only drawn larger or smaller, about the top centre of the screen; it is
+laid out at the new scale once, when the fingers lift. Laying it out on every
+frame of the pinch made the scroll view report, for a moment, the new size with
+a position from the old one, which deep in a Book dropped the Pages on screen
+(a black flash on a real iPhone) and moved the Reading Position to a later Page
+and back (reading-mode-implementation log, "Fix on a real iPhone").
 
 The double tap zooms at once, without an animation. With the animation, a double
 tap deep in the strip landed on another Page or a blank screen. Apple says the

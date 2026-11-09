@@ -74,6 +74,36 @@ struct ReadingViewTests {
         #expect(StripScroll(scrolled) == StripScroll(offset: 1200, viewportHeight: 800))
     }
 
+    @Test("The strip's sideways scroll is measured from its left edge, under any leading inset")
+    func stripScrollMeasuresFromTheLeftEdge() {
+        let panned = ScrollGeometry(
+            contentOffset: CGPoint(x: 280, y: 0), contentSize: CGSize(width: 1170, height: 3000),
+            contentInsets: EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 0),
+            containerSize: CGSize(width: 390, height: 800))
+
+        #expect(StripScroll(panned) == StripScroll(offset: 0, viewportHeight: 800, offsetX: 300))
+    }
+
+    @Test(
+        "A pinch grows the strip about the top centre of the screen: at fit and at the top that is the strip's top centre; zoomed, scrolled and panned it is the point under the screen's top centre; a strip with no size gives the top centre"
+    )
+    func pinchAnchorIsTheScreensTopCentre() {
+        let atFit = VerticalStripView.pinchAnchor(
+            scroll: StripScroll(offset: 0, viewportHeight: 800), viewportWidth: 390,
+            contentWidth: 390, contentHeight: 3000)
+        #expect(atFit == UnitPoint(x: 0.5, y: 0))
+
+        let zoomed = VerticalStripView.pinchAnchor(
+            scroll: StripScroll(offset: 3000, viewportHeight: 800, offsetX: 200),
+            viewportWidth: 400, contentWidth: 1000, contentHeight: 12000)
+        #expect(zoomed == UnitPoint(x: 0.4, y: 0.25))
+
+        let empty = VerticalStripView.pinchAnchor(
+            scroll: StripScroll(offset: 0, viewportHeight: 800), viewportWidth: 390,
+            contentWidth: 390, contentHeight: 0)
+        #expect(empty == .top)
+    }
+
     @Test(
         "Only the reader moves the strip in interacting and decelerating; idle, tracking (a finger down that has not moved) and animating are not the reader",
         arguments: [

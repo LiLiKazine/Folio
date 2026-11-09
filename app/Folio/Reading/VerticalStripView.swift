@@ -8,18 +8,23 @@ struct StripScroll: Equatable {
     let offset: CGFloat
     /// The height of the visible area, in points.
     let viewportHeight: CGFloat
+    /// How far the strip is scrolled sideways, in points from its left edge; 0 at fit,
+    /// where the strip is no wider than the screen.
+    let offsetX: CGFloat
 
-    init(offset: CGFloat, viewportHeight: CGFloat) {
+    init(offset: CGFloat, viewportHeight: CGFloat, offsetX: CGFloat = 0) {
         self.offset = offset
         self.viewportHeight = viewportHeight
+        self.offsetX = offsetX
     }
 
     /// Apple documents that the content offset "may extend before zero ... when the
-    /// content insets of the scroll view are non-zero", so the top inset is added back to
-    /// measure from the first Page.
+    /// content insets of the scroll view are non-zero", so the top and leading insets are
+    /// added back to measure from the first Page.
     init(_ geometry: ScrollGeometry) {
         offset = geometry.contentOffset.y + geometry.contentInsets.top
         viewportHeight = geometry.visibleRect.height
+        offsetX = geometry.contentOffset.x + geometry.contentInsets.leading
     }
 }
 
@@ -71,9 +76,10 @@ struct VerticalStripView: View {
     @State private var lastReport = LastReport()
     /// Moves the strip to an exact offset when the width or the zoom changes.
     @State private var position = ScrollPosition()
-    /// The scale the strip rests at; 1 is fit to the screen's width.
+    /// The scale the strip is laid out at; 1 is fit to the screen's width. A pinch
+    /// changes it once, when the fingers lift (see `liveScale`).
     @State private var scale: CGFloat = 1
-    /// The scale while a pinch is in progress, relative to `scale`.
+    /// The scale while a pinch is in progress, relative to `scale`; 1 between pinches.
     @GestureState private var pinch: CGFloat = 1
     @Environment(\.displayScale) private var displayScale
 
@@ -83,16 +89,45 @@ struct VerticalStripView: View {
         }
     }
 
+    /// The scale on screen: `scale` while the fingers pinch, between fit and the maximum.
+    /// While a pinch is in progress the strip is only drawn at this scale, not laid out at
+    /// it: `scaleEffect` "scales this view's rendered output", so every Page keeps its
+    /// place and height, and the scroll view has nothing to move. The strip is laid out at
+    /// the new scale once, when the fingers lift. Laying it out on every frame of the pinch
+    /// was seen to make the scroll view report, for a moment, the new size together with
+    /// the position from the old one; deep in a Book that position lies past the end of the
+    /// shorter strip, so the Pages on screen were dropped and decoded again, a black flash
+    /// on an iPhone, and the Reading Position moved to a later Page and back
+    /// (reading-mode-implementation log, fix round 4).
     private var liveScale: CGFloat {
         min(max(scale * pinch, 1), PageView.maximumScale)
+    }
+
+    /// The point of the strip the pinch grows it about: the middle of the screen across,
+    /// and the top of the screen down, as a fraction of the strip at `contentWidth` by
+    /// `contentHeight`. That is the place the strip keeps when it is laid out at the new
+    /// scale (`StripGeometry.offset(keepingPlaceOf:in:)`, centred across), so letting go
+    /// does not move what is on screen. A strip with no size has no such point; the top
+    /// centre stands in.
+    nonisolated static func pinchAnchor(
+        scroll: StripScroll, viewportWidth: CGFloat, contentWidth: CGFloat, contentHeight: CGFloat
+    ) -> UnitPoint {
+        guard contentWidth > 0, contentHeight > 0 else { return .top }
+        return UnitPoint(
+            x: (scroll.offsetX + viewportWidth / 2) / contentWidth, y: scroll.offset / contentHeight
+        )
     }
 
     /// The strip for a screen `width` points wide.
     private func strip(width: CGFloat) -> some View {
         let widthPixels = Int((width * displayScale).rounded())
-        let pageWidth = width * liveScale
+        let pageWidth = width * scale
         let stripGeometry = StripGeometry(
             pixelSizes: pixelSizes, width: pageWidth, displayScale: displayScale)
+        let pinchAnchor = Self.pinchAnchor(
+            scroll: lastReport.scroll ?? StripScroll(offset: 0, viewportHeight: 0),
+            viewportWidth: width, contentWidth: pageWidth,
+            contentHeight: stripGeometry.contentHeight)
         return ScrollViewReader { proxy in
             ScrollView([.vertical, .horizontal]) {
                 // A plain stack, not a lazy one: Apple documents that a lazy stack "only
@@ -117,6 +152,7 @@ struct VerticalStripView: View {
                         .id(page)
                     }
                 }
+                .scaleEffect(liveScale / scale, anchor: pinchAnchor)
             }
             .scrollPosition($position)
             // At fit the strip is exactly as wide as the screen, so it moves sideways only
@@ -146,9 +182,9 @@ struct VerticalStripView: View {
                 guard index != topPage else { return }
                 proxy.scrollTo(index, anchor: .top)
             }
-            // A new width (the window resized, the screen turned, a zoom) changes every
-            // Page's height, so the strip is moved to the same place inside the Page under the
-            // top of the screen, centred across. When that place is the offset the strip
+            // A new width (the window resized, the screen turned, a zoom once the fingers
+            // lift) changes every Page's height, so the strip is moved to the same place inside
+            // the Page under the top of the screen, centred across. When that place is the offset the strip
             // already had (at the very top of the strip, for one), the scroll view reports
             // nothing, as it reports only changes, so the Pages to decode are worked out here
             // for the new geometry. This is code moving the strip: it never changes the Page
