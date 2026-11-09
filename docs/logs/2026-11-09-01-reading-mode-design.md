@@ -1,6 +1,6 @@
 # 2026-11-09-01: Reading Mode — design rulings
 
-**Status:** Decided
+**Status:** Decided; implemented, owner's manual checks pending
 
 ## Context
 
@@ -62,8 +62,27 @@ rules because each step is one Apple framework call.
   been authored as the work identity. Fixed with a repo-local
   `include.path` to the personal config.
 
+## Implementation
+
+Built on `feature/reading-mode`. It differs from the design and plan in three
+ways the reader can notice: the strip is a plain stack rather than a lazy one,
+so every Page sits exactly at its known height; every Page's size is read
+before the strip appears, rather than Pages starting as squares; and only the
+reader's own scrolling (dragging or coasting) moves the Reading Position, so
+opening, switching, the slider and the keys never do. Why, with Apple's text
+and the measurements: `docs/logs/2026-11-09-02-reading-mode-implementation.md`.
+
 ## Commits
 
 | Commit | Subject |
 |--------|---------|
-| (this) | docs(reading): add Reading Mode to the glossary and record its design |
+| 045de32 | docs(reading): add Reading Mode to the glossary and record its design |
+| 7d34f5f | docs(reading): implementation plan for Reading Mode |
+| a1e290d | feat(library): Books remember a Reading Mode; chooseReadingMode announces ReadingModeChanged |
+| ddf450e | feat(persistence): schema V2 stores a Book's Reading Mode; the model chooses it log-only |
+| 0bc1bae | feat(reading): strip geometry rule, pixel sizes, width rule, slices and a budgeted cache for Vertical |
+| 4d69086 | fix(reading): the cache applies its budget after every decode, not once after a prefetch |
+| 1012734 | feat(reading): Vertical Reading Mode as one strip of touching Pages, chosen from the chrome |
+| 43f8746 | fix(reading): the strip counts only the reader's scrolling, keeps their place inside a Page when zoomed, and snaps Page heights to the pixel grid |
+| 466ac34 | fix(reading): double tap zoom keeps the reader's place by not animating the size change |
+| (this) | docs(reading): record the Reading Mode rulings and the owner's check list |
