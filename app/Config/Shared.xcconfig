@@ -23,6 +23,13 @@ PRODUCT_NAME = $(TARGET_NAME)
 PRODUCT_BUNDLE_IDENTIFIER = io.lilikaine.github.folio
 GENERATE_INFOPLIST_FILE = YES
 INFOPLIST_KEY_UILaunchScreen_Generation = YES
+// App Store Connect refuses an iPad build that does not support every
+// orientation unless it declares UIRequiresFullScreen (validation error
+// ITMS-90474; Xcode warns "All interface orientations must be supported unless
+// the app requires full screen"). Folio reads in any orientation, so all four
+// on iPad; on iPhone the three Xcode's own template uses.
+INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
+INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight
 INFOPLIST_KEY_NSHumanReadableCopyright = Copyright © Leo
 ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
 ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor
