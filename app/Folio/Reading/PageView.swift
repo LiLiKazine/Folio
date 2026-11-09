@@ -21,7 +21,8 @@ struct PageView: View {
 
     /// The scale a double tap zooms to; a second double tap returns to fit.
     static let zoomedScale: CGFloat = 2.5
-    private static let maximumScale: CGFloat = 5
+    /// The furthest a pinch zooms in, in Page by Page and in Vertical.
+    static let maximumScale: CGFloat = 5
 
     @State private var loaded = Loaded.loading
     /// The scale the Page rests at; 1 is fit to the frame.
@@ -79,10 +80,7 @@ struct PageView: View {
                 .accessibilityLabel(Text("Page \(index + 1) of \(pageCount)"))
                 .accessibilityAddTraits(.isImage)
         case .unavailable:
-            Image(systemName: "photo.badge.exclamationmark")
-                .font(.system(size: 64))
-                .foregroundStyle(.secondary)
-                .accessibilityLabel(Text("Page \(index + 1) could not be shown"))
+            PageUnavailable(index: index)
         }
     }
 
@@ -90,5 +88,18 @@ struct PageView: View {
         withAnimation {
             scale = scale > 1 ? 1 : Self.zoomedScale
         }
+    }
+}
+
+/// Shown in place of a Page that cannot be decoded, in either Reading Mode.
+struct PageUnavailable: View {
+    /// The Page's place in the Book, 0-based.
+    let index: Int
+
+    var body: some View {
+        Image(systemName: "photo.badge.exclamationmark")
+            .font(.system(size: 64))
+            .foregroundStyle(.secondary)
+            .accessibilityLabel(Text("Page \(index + 1) could not be shown"))
     }
 }

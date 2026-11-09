@@ -1,6 +1,6 @@
 # 2026-11-09-02: Reading Mode — implementation
 
-**Status:** In progress (Task 3 of 5 done)
+**Status:** In progress (Task 4 of 5 done)
 
 ## Context
 
@@ -399,3 +399,219 @@ is not covered by a test of its own.
   observed on macOS.
 - Nothing calls these pieces yet, so the strip, the Reading Position's Page at
   the top and scrolling were not run; Task 4 does that.
+
+## Task 4: The Vertical strip on screen, the Reading Mode control, strings
+
+The terms below are used in this section.
+
+- **The strip** is the Vertical screen: every Page at the screen's width, one under the other with no gap, in one scroll view.
+- **The Page at the top** is the Page being read, by the top-of-the-screen rule from Task 3.
+- **A jump** is code moving the strip so a Page's top is at the top of the screen. It happens when the Book opens, when the Reading Mode is switched, and when the slider or a key picks a Page.
+- **The scroll phase** is Apple's name for what a scroll view is doing at a given moment. Its values are:
+  - idle: nothing is moving;
+  - tracking: a finger is down but has not moved yet;
+  - interacting: the reader is dragging;
+  - decelerating: the reader has let go and the strip is coasting;
+  - animating: code is scrolling with an animation.
+- **A plain stack** works out where every row sits before anything is shown. **A lazy stack** works out a row's place only when that row comes near the screen, and guesses for the rest.
+- **The Pages kept decoded** are the Pages the strip asks the cache for at a given moment: every Page with any part on screen, plus one more on each side.
+
+### What Changed
+
+- **`Reading/VerticalStripView.swift` (new): the strip.**
+  - It is a scroll view that moves down, and sideways only when zoomed. Inside it is a plain stack of rows, one per Page. Each row is exactly as tall as the Page's pixel size gives at the screen's width; a Page whose file is not an image is a square.
+  - A row among the Pages kept decoded shows that Page's slices from the cache, or the placeholder if the Page cannot be decoded. Any other row shows nothing and does not ask the cache.
+  - The strip keeps its own cache of slices. It is rebuilt when the screen's width in pixels changes, and it is told the Page at the top so its budget never lets go of that Page or the next.
+  - Zoom works as it does on a single Page: pinch, double tap to zoom in and to go back to fit, letting go below fit snaps back. Zooming brings the Page being read back to its top.
+- **`Reading/StripGeometry.swift`:** `pagesToDecode(offset:viewportHeight:)` gives the Pages kept decoded for a scroll position.
+- **`Reading/ReadingView.swift`:**
+  - The screen holds the Reading Mode, starting from the Book's own (`startMode(for:)`), and shows the pager or the strip accordingly. A switch gives the content a new identity, which resets zoom.
+  - Choosing a mode changes the screen at once and asks the model to save the choice afterwards. A failed save stays log-only, in the model (Task 2).
+  - The Page by Page cache starts empty after each switch and prefetches only in Page by Page, so the two modes never hold decoded Pages at the same time.
+  - Pixel sizes are read once per Book, off the main thread, the first time the Book is shown Vertical. Until they are read the screen is blank, with the chrome as usual (ruling 11).
+  - On Mac the left and right arrow keys still turn Pages in both modes. In Vertical the turn is a jump without animation.
+- **`Reading/PageView.swift`:** the maximum zoom and the placeholder are shared with the strip. Page by Page behaves as before.
+- **The Reading Mode control**, shown with the chrome:
+  - on Mac, a segmented control in the toolbar with "Page by Page" and "Vertical";
+  - on iPhone and iPad, a button in the navigation bar (the `book.pages` symbol, labelled "Reading Mode") that opens a menu with the two modes, the current one ticked. Two labelled segments beside the Title and Close would crowd the iPhone's bar.
+- **`Localizable.xcstrings`:** "Reading Mode", "Page by Page", "Vertical". The catalog was synced from both platforms' compiled string lists and the compact `{}` entries restored, so the diff shows only these three keys. "Reading Mode" is also the control's accessibility label, so no other string was needed.
+
+### How the strip knows which Page you are on
+
+Each time the strip moves, the scroll view reports two numbers: how far the strip is scrolled, measured from the top of the first Page, and how tall the visible area is. From these:
+
+1. **The Pages kept decoded are worked out on every report.**
+2. **The Page at the top is worked out on every report, but it becomes the Page being read only while the scroll phase says the reader is moving the strip** (tracking, interacting or decelerating; ruling 10). Every Page the reader scrolls onto is saved once, through the model's `turnPage`, as with a swipe in Page by Page.
+
+   The opening, a switch, the slider and the keys set the Page being read directly. The scroll view's own reports while it is being put in place never change it. This is what stopped a Book from opening on Page 1: the scroll view reports the top of the strip once, before the jump, and that report used to overwrite the Reading Position.
+3. **When the reader starts or stops moving the strip, the phase change also carries the strip's position**, so the Page they stop on is never missed.
+4. **When the Page being read changes and that Page is not already the Page at the top, the strip jumps there.**
+
+   The "not already at the top" part is the one check the brief asked for, and it is still needed. Every Page the reader scrolls onto comes back to the strip as a change of the Page being read. Without the check, the strip would then pull that Page's top up to the top of the screen while the reader is still scrolling.
+
+   It used to compare with "the Page the rule last reported". It now compares with the Page at the top at the last report, because the old form could go stale after a slider jump and then skip a later jump.
+5. **When the screen's width or the zoom changes, the strip jumps back to the top of the Page being read**, because every Page below it moves.
+
+### Why a plain stack (ruling 12)
+
+With the plan's lazy stack, on the iPhone simulator, after a slider drag to the end of a 24-Page Book:
+
+- the scroll view reported positions up to 24,671 points in a strip that is 20,770 points tall;
+- swiping back showed Page 20 at the top while the counter read "Page 24 of 24";
+- a jump to Page 21 landed at the end instead of at Page 21's top.
+
+Apple documents why, in the quotes under "Apple documentation relied on" below: a lazy stack works out a row's place only as it nears the screen, while a plain stack knows every row's size.
+
+With the plain stack the same checks pass: the positions match the known Page heights exactly. The cost is that every row exists at once, as a small empty frame; for a 1,000-Page Book that is 1,000 rows. Because a plain stack creates every row at once, decoding cannot start "when a row appears". The Pages kept decoded decide it instead.
+
+### Apple documentation relied on
+
+All fetched on 2026-11-09 from `developer.apple.com/tutorials/data/documentation/swiftui/<path>.json`.
+
+- **Creating performant scrollable stacks** (`creating-performant-scrollable-stacks`):
+  - "Stack views load their child views all at once, making layout fast and reliable, because the system knows the size and shape of every subview as it loads them. Lazy stacks trade some degree of layout correctness for performance, because the system only calculates the geometry for subviews as they become visible."
+  - "When choosing the type of stack view to use, always start with a standard stack view and only switch to a lazy stack if profiling your code shows a worthwhile performance improvement."
+  - "Never profile your code using the iOS simulator. Always use real devices for performance testing."
+- **`onScrollGeometryChange(for:of:action:)`** (`view/onscrollgeometrychange(for:of:action:)`):
+  - "Adds an action to be performed when a value, created from a scroll geometry, changes."
+  - The action "is called whenever the data type changes".
+  - "If multiple scroll views are found within the view hierarchy, only the first one will invoke the closure you provide". The strip has one scroll view.
+- **`ScrollGeometry`:**
+  - `contentOffset`: "This is the position of the scroll view within its overall content size. This value may extend before zero or beyond the content size when the content insets of the scroll view are non-zero or when rubber banding."
+  - `contentInsets`: "Adding these insets to the content size of the scroll view will give you the total scrollable space of the scroll view."
+  - `visibleRect`: "This value is computed from the scroll view's content offset, content insets, and its container size."
+
+  The strip measures from the top of the first Page as offset plus top inset (ruling 6). The viewport height is the visible rectangle's height.
+- **`onScrollPhaseChange(_:)`** (`view/onscrollphasechange(_:)-1k12m`):
+  - "Adds an action to perform when the scroll phase of the first scroll view in the hierarchy changes."
+  - "The system can also provide you with a context containing the geometry of the scroll view at the time of the phase change. You can use the geometry to understand where the scroll view has come or gone between the phase changes and update dependent state on that information."
+- **`ScrollPhase`** (`scrollphase` and its cases):
+  - `idle`: "The idle phase where no kind of scrolling is occurring."
+  - `tracking`: "The tracking phase where the scroll view is tracking a potential scroll by the user but the user hasn't started a scroll." Also: "For example, on iOS, the user may start touching content inside of the scroll view. Until the user moves their finger the scroll view would be tracking the finger. Not all platforms or kinds of scroll may trigger this phase."
+  - `interacting`: "The interacting phase where the user is interacting with the scroll view."
+  - `decelerating`: "The decelerating phase where the user use has stopped interacting with the scroll view and the scroll view is decelerating towards its final target."
+  - `animating`: "The animating phase where the scroll view is animating towards a final target." Also: "This phase is the result of a programmatic scroll when using a ScrollViewReader or scrollPosition(id:anchor:) modifier."
+
+  Because Apple ties `animating` to programmatic scrolls, it does not count as the reader. Apple's text says nothing about which Mac input (wheel, trackpad, Page Up and Page Down, the arrow keys) gives which phase.
+- **`ScrollViewProxy.scrollTo(_:anchor:)`:**
+  - "Scans all scroll views contained by the proxy for the first with a child view with identifier `id`, and then scrolls to that view."
+  - "setting `anchor` to top aligns the top of the identified view to the top of the scroll view."
+  - `ScrollViewReader`: actions such as "a view's onChange(of:perform:) method" may call the proxy.
+- **`scrollTargetLayout(isEnabled:)`:** "This modifier works together with the ViewAlignedScrollTargetBehavior to ensure that scroll views align to view based content." Neither the `scrollTo(_:anchor:)` page nor the `ScrollViewReader` page mentions it, and the strip uses neither view alignment nor `scrollPosition`, so it was left out.
+- **`onChange(of:initial:_:)`:** `initial` means "Whether the action should be run when this view initially appears". This is how the strip makes its first jump to the Reading Position's Page.
+- **`id(_:)`:** "When the proxy value specified by the `id` parameter changes, the identity of the view — for example, its state — is reset." This is how a switch resets zoom.
+- **`scrollBounceBehavior(_:axes:)` and `basedOnSize`:** "The scrollable view bounces along the specified axis if the size of the content exceeeds the size of the scrollable view in that axis." At fit the strip is exactly as wide as the screen, so it does not move sideways.
+- **`task(id:...)`:** "If the `id` value changes, SwiftUI cancels and restarts the task." This is how the cache is told the new Page at the top.
+- **`Image(decorative:scale:orientation:)`:** "SwiftUI ignores this image for accessibility purposes." Each slice is decorative, and the whole Page carries the "Page n of m" label.
+- **`MagnifyGesture`:** "A gesture that recognizes a magnification motion and tracks the amount of magnification." Used the same way as on a single Page.
+- **Pickers.** `PickerStyle.segmented`: "Use this style when there are two to five options." `PickerStyle.menu`: "Use this style when there are more than five options."
+
+  The iPhone control is a menu button holding the two options, not a menu-style picker. The HIG for segmented controls on macOS: "Consider using a segmented control to help people switch views in a toolbar or inspector pane."
+- **Swift `Task.detached`** was not used. The pixel-size read is a `@concurrent` function, as `CoverView` already does.
+
+### What the documentation does not say (observed)
+
+All on the iPhone 17 Pro simulator, iOS 26.5, driven by an automation tool that sends taps and swipes to the simulator only. Numbers come from throwaway logging, removed before commit.
+
+- **The scroll view reports its position once when the strip first appears**, with the old and new values equal (top of the strip, before any jump). Apple only says the action runs when the value changes. The scroll-phase gate is what keeps this report from changing the Reading Position.
+- **Phases seen:**
+  - a finger swipe goes idle → interacting → decelerating → idle;
+  - jumps from the slider and on opening made no phase change (idle throughout);
+  - a pinch made no phase change either;
+  - one change arrives once with old and new both idle, at first appearance;
+  - "decelerating → decelerating" also arrives.
+- **With the strip under the whole screen (ignoring the safe area), the top and bottom insets were 0**, so the visible rectangle's height (874 points) is the visible area.
+- **Jumps land on the Page's top to within the screen's pixel grid.** The scroll view stops on thirds of a point: Page 9's top is 12,629.5 and the strip stopped at 12,629.667. Because only the reader's scrolling changes the Page being read, this rounding cannot move the counter.
+- **A strip shorter than the screen is centred vertically.** The one-Page Book's Page sits 135 points down. Nothing in the spec asks otherwise, so nothing was added.
+- **A double-tap zoom lands at the left edge of the zoomed strip.** A pinch zoom stays centred. Zooming in either way brings the Page being read back to its top.
+
+### Simulator checks
+
+All on the iPhone 17 Pro simulator, iOS 26.5. The test Books were made outside the repository from generated pictures:
+
+- **Strip Mixed**, 24 Pages: 800 x 4,000 and 600 x 12,000 Pages, wide Pages, and Page 5, a text file named like a picture.
+- **Strip Short**, 12 Pages of 1,600 x 900, all shorter than the screen.
+- **Strip One**, 1 Page.
+- **Strip Thousand**, 1,000 Pages of 120 x 180 and 180 x 120.
+
+| Check | Result |
+|---|---|
+| Switch to Vertical while on Page 4 | Page 4 at the top; counter "Page 4 of 24"; Reading Position stays Page 4 |
+| Scroll, close, reopen | Library card read "Page 5 of 24"; reopening put Page 5's top at the top |
+| Swiping | Counter followed the Page at the top; one save per Page crossed (Pages 5, 6, 7) |
+| Slider jumps | Each landed with the Page's top at the top (Pages 9, 10, 11, 21; Page 993 of 1,000) |
+| Slider to the end, then swipe back | Counter read "Page 20 of 24" with Page 20 at the top |
+| Reopen a Book saved at Page 24 | Strip ended exactly at its bottom (scrolled to 19,896 + 874 = 20,770) |
+| First appearance | Never changed the Reading Position, in any check above |
+| Switch back to Page by Page from Page 7 | Page by Page showed Page 7 |
+| Pinch | Zoomed about the top centre with Page 7's top kept at the top; panned sideways; no save during the pinch |
+| Double tap | Zoomed in (2.5x) and back to fit |
+| Switching after a zoom | Strip came back at fit |
+| All Pages shorter than the screen | Switching on Page 5 and reopening both put Page 5 at the top; counter "Page 5 of 12" |
+| One-Page Book | Slider disabled; Page 1 at every position, including when pulled past either end |
+| Page whose file is not an image | Square of the screen's width with the placeholder; reaching it did not move the strip |
+
+### Measured (simulator on this Mac, not a device)
+
+| What | Book | Result |
+| --- | --- | --- |
+| Reading every Page's pixel size | 24 Pages (Strip Mixed) | 0.010 to 0.022 s |
+| Reading every Page's pixel size | 1,000 Pages | 0.153 s on the first open; 0.060 to 0.219 s on later opens |
+| From the sizes being read to the strip's first layout | 1,000 Pages | 17 to 20 ms |
+| Rows asking the cache after opening | 1,000 Pages, at Page 1 | 3 |
+| Rows asking the cache after opening | 24 Pages, saved at Page 24 | 7 (see below) |
+| Rows asking the cache during a long fast scroll | 1,000 Pages, Page 1 to 428 | 416 asks over the scroll; at most 6 at once, 5 at rest; 419 decodes in all |
+| Reading Position saves during that scroll | as above | 218 for 427 Pages crossed |
+| Slices held by the cache | Strip Mixed, plain stack | at most 50.7 MB (the iPhone budget is 288 MB) |
+| Memory used by the app | 1,000 Pages, after the long scroll | 67 MB |
+
+Notes on the table:
+
+- **The 24-Page open.** 3 rows asked because of the first report at the top of the strip, before the jump. Two of them were cancelled before decoding; one decoded for nothing.
+- **Saves during the fast scroll.** One report can cross several Pages, so a save is made at most once per Page crossed, never more.
+- **The real Sample Book** (`~/Downloads/FolioSamples/Sample Book`) has 3 Pages, so the 24-Page figure is for Strip Mixed.
+- **The 1,000-Page read is under 0.3 s** on the simulator.
+
+### Tests
+
+- **`StripGeometryTests`** (`pagesToDecode`):
+  - a Page partly on screen counts;
+  - one Page more on each side, clamped at the first and last Page;
+  - scrolled past either end keeps the nearest Page and its neighbour;
+  - Pages shorter than the screen keep more Pages than one tall Page does;
+  - one Page always, and an empty strip none.
+- **`ReadingViewTests`:**
+  - `startMode` is the Book's own Reading Mode;
+  - the strip's scroll is measured from the top of the content under an inset;
+  - only tracking, interacting and decelerating count as the reader.
+
+### What Was Discovered
+
+- **Before the code existed, the new tests failed to compile:**
+  - for `startMode` and `StripScroll`: "type 'ReadingView' has no member 'startMode'" and "cannot find 'StripScroll' in scope";
+  - for the decode window: "value of type 'StripGeometry' has no member 'pagesToDecode'".
+- **Starting a Page's decode when its row appears could not stay within the budget in a plain stack**, where every row appears at once. With Apple's on-screen visibility check at threshold 0, all 24 rows of Strip Mixed reported visible. This was tried and dropped for the pure function above (ruling 12).
+- **Asking SwiftUI to open the scroll view at a Page by name** (`ScrollPosition` with a starting id) did not stop the first report at the top of the strip either. Tried, reverted.
+- **An existing warning in this file is not turned into an error by the build:** `ReadingView.swift:95`, "main actor-isolated property 'displayScale' can not be referenced from a Sendable closure", in the Page by Page size observer, which was there before this task. Tests that call main-actor helpers (`startIndex`, `LibraryWindow.push`) warn the same way. The settings say warnings are errors, but the build passes. It is reported, not silenced.
+
+### Gate
+
+- `swift test --package-path app/FolioCore -Xswiftc -warnings-as-errors`, through `verify.sh`.
+- `SIMULATOR=F9304E8C-40F4-4962-A836-C10615C7DC16 SKIP_LAUNCH=1 ./scripts/verify.sh`: format, build and test for iOS and macOS.
+- The launch step was skipped because on macOS it takes a picture of the whole desktop, which is the project owner's screen. The launches were done separately: `./scripts/run.sh ios --screenshot` on the simulator, and `./scripts/run.sh macos` without the screenshot. Neither sends any input.
+- `./scripts/format.sh --check`: clean.
+- The vocabulary check (`grep` for the words to avoid in `app/Folio/Reading` and `app/FolioTests`) shows only `.scrollTargetLayout()`, the Apple name in the existing pager.
+
+### Not checked
+
+- **Everything on the Mac.** After an early attempt in this task sent keystrokes to the owner's Mac (they landed in another window), agents send no input to the Mac at all. These are on the owner's list:
+  - the segmented control in the toolbar;
+  - Vertical scrolling with the wheel and the trackpad;
+  - left and right arrows turning Pages in both modes;
+  - does the counter follow Page Up, Page Down and the up and down arrows in Vertical? Apple does not say which phase keyboard scrolling reports. If it is not one of the reader's phases, the counter would stay put while the keys scroll.
+  - window resizing keeping the Page being read at the top;
+  - Escape closing the Book.
+- **iPad and iPhone rotation.** Not run.
+- **Performance on a device.** Apple says to profile on a real device, not the simulator; every number above is from the simulator. Open question for the owner: is a plain stack of 1,000 or more rows smooth enough on a real iPhone?
+- **A Page whose top does not fall on the screen's pixel grid, reached by the reader's own scrolling, exactly at the moment it touches the top.** Only jumps were seen landing on thirds of a point.
+- **The HIG for macOS toolbars** says "Make every toolbar item available as a command in the menu bar". There is no Reading Mode menu command; it is outside this task's brief.

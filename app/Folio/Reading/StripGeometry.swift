@@ -43,4 +43,32 @@ struct StripGeometry: Equatable, Sendable {
         }
         return max(low - 1, 0)
     }
+
+    /// The Pages to keep decoded when the strip is scrolled to `offset` with a visible area
+    /// `viewportHeight` tall: every Page with any part on screen and one more on each side,
+    /// so a screen of short Pages keeps more Pages than a screen showing one tall Page.
+    /// Scrolled past either end, with nothing on screen, it is the nearest Page and its
+    /// neighbour. Empty for an empty strip.
+    func pagesToDecode(offset: CGFloat, viewportHeight: CGFloat) -> Range<Int> {
+        guard !tops.isEmpty else { return 0..<0 }
+        let last = tops.count - 1
+        // The first Page whose bottom is below the top of the visible area.
+        let firstOnScreen = min(firstIndex { tops[$0] + heights[$0] > offset }, last)
+        // The last Page whose top is above the bottom of the visible area.
+        let lastOnScreen = max(firstIndex { tops[$0] >= offset + viewportHeight } - 1, 0)
+        return max(firstOnScreen - 1, 0)..<(min(lastOnScreen + 1, last) + 1)
+    }
+
+    /// The first Page for which `isPast` holds, or the Page count when none does. `isPast`
+    /// must be false for every Page before some point and true from it on, as it is for
+    /// tops and bottoms, which only grow down the strip.
+    private func firstIndex(where isPast: (Int) -> Bool) -> Int {
+        var low = 0
+        var high = tops.count
+        while low < high {
+            let middle = (low + high) / 2
+            if isPast(middle) { high = middle } else { low = middle + 1 }
+        }
+        return low
+    }
 }
