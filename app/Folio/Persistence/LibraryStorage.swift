@@ -33,17 +33,30 @@ enum LibraryStorage {
 
     /// Container whose store file is `<booksDirectory>/Library.store`.
     static func makeContainer(inMemory: Bool = false) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: FolioSchemaV1.self)
-        let configuration: ModelConfiguration
         if inMemory {
-            configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
-        } else {
-            let storeURL = try booksDirectory().appending(
-                path: "Library.store", directoryHint: .notDirectory)
-            AppLog.persistence.info("Library store at \(storeURL.path, privacy: .private)")
-            configuration = ModelConfiguration(schema: schema, url: storeURL)
+            let schema = Schema(versionedSchema: FolioSchemaV2.self)
+            return try makeContainer(
+                schema: schema,
+                configuration: ModelConfiguration(schema: schema, isStoredInMemoryOnly: true))
         }
-        return try ModelContainer(
+        let storeURL = try booksDirectory().appending(
+            path: "Library.store", directoryHint: .notDirectory)
+        AppLog.persistence.info("Library store at \(storeURL.path, privacy: .private)")
+        return try makeContainer(at: storeURL)
+    }
+
+    /// Container for the store file at `url`, migrating it to the current schema if an
+    /// earlier version wrote it.
+    static func makeContainer(at url: URL) throws -> ModelContainer {
+        let schema = Schema(versionedSchema: FolioSchemaV2.self)
+        return try makeContainer(
+            schema: schema, configuration: ModelConfiguration(schema: schema, url: url))
+    }
+
+    private static func makeContainer(
+        schema: Schema, configuration: ModelConfiguration
+    ) throws -> ModelContainer {
+        try ModelContainer(
             for: schema, migrationPlan: FolioMigrationPlan.self, configurations: [configuration])
     }
 }
