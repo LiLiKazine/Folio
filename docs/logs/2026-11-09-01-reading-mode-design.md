@@ -86,4 +86,6 @@ and the measurements: `docs/logs/2026-11-09-02-reading-mode-implementation.md`.
 | 43f8746 | fix(reading): the strip counts only the reader's scrolling, keeps their place inside a Page when zoomed, and snaps Page heights to the pixel grid |
 | 466ac34 | fix(reading): double tap zoom keeps the reader's place by not animating the size change |
 | 4d01b80 | docs(reading): record the Reading Mode rulings and the owner's check list |
-| (this) | docs(reading): correct the owner's check list and label observed behaviour as observed |
+| 049b9fb | docs(reading): correct the owner's check list and label observed behaviour as observed |
+| 36a035e | fix(reading): one decode cache for the strip, a fresh decode window after every size change, no bounce on a one-screen Book |
+| (this) | docs(reading): record the final review, the last three rulings and the extra check items |

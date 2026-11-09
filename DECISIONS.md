@@ -552,6 +552,21 @@ Book or switching Reading Mode never moves their place. Two consequences:
   scrolling reports. If one of them does not count as the reader scrolling,
   scrolling that way would not move the counter. Not checked.
 
+**A Book that fits on one screen does not bounce.** A *bounce* is the strip
+giving under the finger when it is pulled past either end, and springing back
+when let go. The top-of-the-screen rule reads the strip as at its very end
+whenever the bottom of the last Page is on screen, which for a Book that fits on
+one screen is true as soon as it is pulled at all. So one drag moved the counter
+to the last Page and saved it, then saved the first Page again as the strip
+sprang back. The strip now bounces top to bottom only when its Pages are taller
+than the screen, and sideways only when zoomed, using the setting Apple
+documents for this: the scroll view "bounces along the specified axis if the
+size of the content exceeeds the size of the scrollable view in that axis"
+(Apple's spelling). The top-of-the-screen rule stays as the design wrote it. What the user experiences:
+a Book of one or two short Pages does not give under the finger and keeps its
+Reading Position; a taller Book bounces as before. Seen on the iPhone simulator;
+not checked on the Mac.
+
 **Tall Pages are decoded at the screen's width, cut into slices, kept within a
 memory budget, and decoded one at a time.** A *slice* is a horizontal band of a
 decoded Page, at most 2,048 pixels tall; a *budget* is the most memory decoded
@@ -579,12 +594,19 @@ reader Mihon (Android) does; Aidoku (iOS) does the first step the same way.
   Pages' worth; the design's "memory stays within a stated budget" decided
   against it.
 - *Which Pages.* Only Pages with some part on screen, plus one more on each
-  side, are decoded; that is more Pages when they are short.
-- *One at a time.* The strip's decodes run one after another, so two tall Pages
-  are not decoded at once. The exception: when the strip's width changes, for
-  example while a Mac window is being resized, the strip starts again with a new
-  set of decoded Pages for the new width, and a decode still running for the old
-  width can overlap the first one for the new width. Not checked; it is on the
+  side, are decoded; that is more Pages when they are short. The strip asks for
+  each of them itself; its cache does not decode ahead on its own. Which Pages
+  these are is worked out again whenever the strip moves and whenever its width
+  or zoom changes. A zoom out at the very top of the strip does not move it, so
+  before the final review the Pages that came into view there stayed blank until
+  the reader scrolled.
+- *One at a time.* The strip keeps one cache of decoded Pages for as long as it
+  is on screen, and every decode goes through it one after another, so two tall
+  Pages are never decoded at once. When the strip's width changes, for example
+  while a Mac window is being resized, the cache lets go of every Page it holds
+  and decodes at the new width from then on. Until the final review a new cache
+  was made for every new width, and a decode still running in the old one could
+  overlap one in the new. Resizing is not checked on the Mac; it is on the
   owner's list.
 
 What the reader would notice: tall Pages are sharp; a Page that left the screen

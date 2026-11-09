@@ -20,7 +20,9 @@ button in the iPhone and iPad navigation bar.
 Verified: the FolioCore and app tests pass on iOS and macOS (`verify.sh`
 without its launch step), and every item in Task 4's "Simulator checks" was
 seen working on the iPhone 17 Pro simulator, iOS 26.5, including zoom deep in
-the strip and the defects found in review, once fixed.
+the strip and the defects found in review, once fixed. The final review's two
+fixes a reader can see, zooming out at the very top of a Book and dragging a
+Book that fits on one screen, were seen working there too (see "Final review").
 
 Not verified:
 
@@ -66,7 +68,8 @@ in a temporary folder that may since have been cleared:
 `/private/tmp/claude-501/-Users-leo-Developer-Folio/2b647ec0-073d-40c0-8b4f-1235ca57bf1a/scratchpad/books`.
 Strip Mixed has 24 Pages, with a 600 x 12,000 pixel Page as Page 7, and a
 Page 5 that holds text, not a picture, though it is named like one; Strip Short has 12 Pages wider than they
-are tall; Strip Thousand has 1,000 small Pages. Any Book with a very tall Page,
+are tall; Strip Thousand has 1,000 small Pages; Strip Two has two of Strip
+Short's Pages, which together fit on one screen. Any Book with a very tall Page,
 and any Book of landscape pictures, will do as well.
 
 ### Mac (nothing checked)
@@ -75,16 +78,19 @@ and any Book of landscape pictures, will do as well.
 2. Scroll the strip with the mouse wheel, then with two fingers on the trackpad: the strip moves, and the counter at the bottom changes to each Page as its top passes the top of the window.
 3. Close the Book: its card in the Library reads "Page n of N" for the Page the counter showed last.
 4. Reopen the Book, then quit Folio, relaunch it and reopen the Book again: both times it opens in Vertical with that Page's top at the top of the window, and a Book you did not switch still opens Page by Page.
-5. In a Book whose Pages are all wider than they are tall, make the window narrow enough that two or more Pages fit in its height at once (or use a Book of small Pages), choose Vertical while on Page 5, then close and reopen it: Page 5 is at the top and the counter reads Page 5.
+5. In a Book whose Pages are all wider than they are tall, make the window narrow enough that two or more Pages fit in its height at once, choose Vertical while on Page 5, then close and reopen it: Page 5 is at the top and the counter reads Page 5.
 6. Scroll slowly through a very tall Page: it is sharp all the way down, with no visible join between its bands, and the app keeps responding while you scroll.
 7. While on any Page in Vertical, choose "Page by Page": the same Page is shown.
 8. In Vertical press the left and right arrow keys: the strip jumps to the top of the previous or next Page and the counter follows; in Page by Page they turn Pages as before.
 9. In Vertical press the up and down arrow keys, then Page Up and Page Down, and note whether the strip scrolls at all and, if it does, whether the counter follows (nothing in the app passes these keys to the strip, the reading screen holds the keyboard, and Apple does not say whether keyboard scrolling counts as the reader scrolling).
 10. Press Escape while reading in Vertical: the Book closes.
-11. While part-way down a tall Page in Vertical, drag the window's edge to make it wider and narrower: the part of the Page you were looking at stays at the top of the window, the Pages are sharp again when you stop, and note whether the resize stutters (the Pages are decoded again at every new width while you drag).
+11. While part-way down a tall Page in Vertical, drag the window's edge to make it wider and narrower: the part of the Page you were looking at stays at the top of the window, the Pages are sharp again when you stop, and note whether the resize stutters (the Pages are decoded again, one at a time, at every new width while you drag).
 12. In the middle of a tall Page, pinch on the trackpad and then double-click: the part you were looking at stays at the top of the window, the strip is centred left to right, and a second double-click goes back to fit.
 13. Scroll to the very end of a Vertical Book, close it and reopen it: the strip ends exactly at the bottom of the last Page.
 14. With a Library made by the previous version of Folio (for example a build of the main branch from before this work), run this version over it without deleting the app's data: every Book is still there with its Cover, its card shows the same "Page n of N" as before, and each Book opens Page by Page.
+15. Open a Book whose first Page is tall (Strip Mixed will do) in Vertical at the very top of the strip, then drag the window's edge to make it wider and narrower: the Pages that come into view appear without scrolling, and the app keeps responding while you drag.
+16. At the very top of a Vertical Book, pinch on the trackpad to zoom in and back out to fit, then double-click in and out: the Pages that come into view at fit appear at once, without scrolling.
+17. Open a Book of one or two small Pages (Strip Two) in Vertical and scroll it up and down with two fingers on the trackpad: it does not move or give under your fingers, and the counter and its Library card keep its Page.
 
 ### iPhone (simulator only; nothing tried on a real iPhone)
 
@@ -102,6 +108,9 @@ and any Book of landscape pictures, will do as well.
 12. On a real iPhone, open a Book of 1,000 or more Pages in Vertical and scroll fast for a long way: the blank moment before the strip appears is short, scrolling stays smooth, and the system does not close the app for using too much memory (on the simulator: 0.06 to 0.22 s before the strip appeared, and 67 MB after a long scroll).
 13. Scroll to the very end of a Vertical Book, close it and reopen it: the strip ends exactly at the bottom of the last Page. Seen on the simulator.
 14. With the previous version of Folio installed and a Library in it (some Books part-read), install this version over it without deleting the app: every Book is still there with its Cover, its card shows the same "Page n of N" as before, and each Book opens Page by Page.
+15. At the very top of a Vertical Book, double tap to zoom in, pan sideways, then double tap back to fit; then do the same with a pinch: the Pages that come into view at fit appear at once. Seen on the simulator (Strip Short, both ways).
+16. Open a Book of one or two small Pages (Strip Two) in Vertical and drag it up and down: it does not bounce, and the counter and its Library card keep its Page; a taller Book still bounces. Seen on the simulator.
+17. On a real iPhone, jump with the slider to a Page, then move the slider one Page back: the strip moves to the previous Page. Every Page's top is placed on the screen's pixel grid (ruling 15) because the simulator was seen to stop only on whole pixels; whether a real phone does too is unchecked.
 
 ### iPad (nothing checked on an iPad or its simulator)
 
@@ -308,10 +317,12 @@ Vertical strip on top of these pieces.
   far, decodes one at a time, and after every Page it decodes releases the
   least recently used Pages while the total is over the cache budget, never the
   Page at the top of the screen, the one after it, or the Page it is handing
-  back. (Fix round 1, below, changed this from "once, after a whole prefetch".)
+  back. (Fix round 1, below, changed this from "once, after a whole prefetch".
+  The final fix wave removed the prefetch and made one cache serve the strip
+  for its whole life, told each new width; see "Final review".)
 - Tests: `StripGeometryTests`, `SlicedPageTests`, `SlicedPageCacheTests`, and
-  two new tests in `PageImageTests`. `PNGFixture` (in `SlicedPageTests.swift`)
-  writes the small test Pages.
+  two new tests in `PageImageTests`. `PNGFixture` (in `SlicedPageTests.swift`,
+  moved to a file of its own in the final fix wave) writes the small test Pages.
 
 ### How a Page is decoded, and why slices are redrawn
 
@@ -446,7 +457,9 @@ itself is not misled.
   keeps Pages 0 and 1 and releases Page 2 (asking for it again decodes it
   again); `retain` releases the least recently used Page first; a Page that
   cannot be decoded is remembered and not retried; a request from a cancelled
-  task decodes nothing; an index outside the Book gives nothing.
+  task decodes nothing; an index outside the Book gives nothing. (The final fix
+  wave rewrote the prefetch tests around the two calls the strip makes; see
+  "Final review".)
 
 ### What Was Discovered
 
@@ -507,7 +520,9 @@ ask for one at a time, and checks after each that the cache holds no more than
 its budget plus one Page; it then checks that a whole prefetch ends holding
 exactly the top Page and the next. It failed against the first version (three
 expectations, one per extra Page held) and passes now. The order of the prefetch
-is not covered by a test of its own.
+is not covered by a test of its own. The prefetch was later removed (ruling 20):
+once the strip asked for each Page on screen itself (ruling 12), nothing in the
+app called it.
 
 ### Gate
 
@@ -546,7 +561,7 @@ The terms below are used in this section.
 - **`Reading/VerticalStripView.swift` (new): the strip.**
   - It is a scroll view that moves down, and sideways only when zoomed. Inside it is a plain stack of rows, one per Page. Each row is exactly as tall as the Page's pixel size gives at the screen's width; a Page that is not a picture is a square.
   - A row among the Pages kept decoded shows that Page's slices from the cache, nothing while they are being decoded, or the placeholder if the Page cannot be decoded. Any other row shows nothing and does not ask the cache.
-  - The strip keeps its own cache of slices. It is rebuilt when the screen's width in pixels changes, and it is told the Page at the top so its budget never lets go of that Page or the next.
+  - The strip keeps its own cache of slices, told the Page at the top so its budget never lets go of that Page or the next. It was rebuilt whenever the screen's width in pixels changed; since the final fix wave it is one cache for the strip's whole life, told each new width (ruling 19).
   - Zoom uses the same gestures and limits as a single Page: a pinch up to 5 times; a double tap to 2.5 times and again back to fit; a pinch to zoom out stops at fit, so the strip is never narrower than the screen. (The design says letting go below fit snaps back; as on a single Page, the code holds the zoom at fit during the pinch, so there is nothing to snap back.) It zooms the whole strip, and the reader will notice three differences from a single Page:
     - zooming, and any other change of the screen's width, keeps the reader at the same place inside the Page under the top of the screen (fix round 1);
     - a double tap zooms at once, without the animation a single Page uses (fix round 2);
@@ -571,13 +586,13 @@ The terms below are used in this section.
 
 Each time the strip moves, the scroll view reports two numbers: how far the strip is scrolled, measured from the top of the first Page, and how tall the visible area is. From these:
 
-1. **The Pages kept decoded are worked out on every report.**
+1. **The Pages kept decoded are worked out on every report.** Since the final fix wave they are also worked out after every change of width or zoom, which can leave the scroll view where it was and so bring no report.
 2. **The Page at the top is worked out on every report, but it becomes the Page being read only while the scroll phase says the reader is moving the strip**: interacting or decelerating (ruling 10 as amended by ruling 13). Tracking, a finger down that has not moved, does not count, so a tap never changes the Page. Every Page the reader scrolls onto is saved once, through the model's `turnPage`, as with a swipe in Page by Page.
 
    The opening, a switch, the slider and the keys set the Page being read directly. The scroll view's own reports while it is being put in place never change it. This is what stopped a Book from opening on Page 1: the scroll view reports the top of the strip once, before the jump, and that report used to overwrite the Reading Position.
 
    One consequence the reader can see (added in Task 5): after a jump to a Page near the end whose top cannot reach the top of the screen, because the strip stops at its bottom first, the counter and the Reading Position stay on the Page asked for, while the end-of-strip part of the top-of-the-screen rule would say the last Page. For example, in the 12-Page Book of fix round 1, the slider to Page 11 leaves the strip at its very end, with the bottom of Page 10 and all of Pages 11 and 12 on screen, and the counter reads "Page 11 of 12". As soon as the reader scrolls, the rule applies again. Reopening a Book whose Reading Position is its last Page still lands exactly at the bottom (seen on the simulator).
-3. **When the reader starts or stops moving the strip, the phase change also carries the strip's position**, so the Page they stop on is never missed.
+3. **When the reader starts or stops moving the strip, the phase change also carries the strip's position**, so the Page they stop on is recorded even when no report came after the last move. A jump made while the strip is still coasting is recorded the same way, as the reader's, when the coasting ends. (Before the final fix wave this said the Page they stop on is "never missed", which claimed more than the code does.)
 4. **When the Page being read changes and that Page is not already the Page at the top, the strip jumps there.**
 
    The "not already at the top" part is the one check the brief asked for, and it is still needed. Every Page the reader scrolls onto comes back to the strip as a change of the Page being read. Without the check, the strip would then pull that Page's top up to the top of the screen while the reader is still scrolling.
@@ -640,7 +655,7 @@ All fetched on 2026-11-09 from `developer.apple.com/tutorials/data/documentation
 - **`scrollTargetLayout(isEnabled:)`:** "This modifier works together with the ViewAlignedScrollTargetBehavior to ensure that scroll views align to view based content." Neither the `scrollTo(_:anchor:)` page nor the `ScrollViewReader` page mentions it, and the strip uses neither view alignment nor `scrollPosition`, so it was left out.
 - **`onChange(of:initial:_:)`:** `initial` means "Whether the action should be run when this view initially appears". This is how the strip makes its first jump to the Reading Position's Page.
 - **`id(_:)`:** "When the proxy value specified by the `id` parameter changes, the identity of the view — for example, its state — is reset." This is how a switch resets zoom.
-- **`scrollBounceBehavior(_:axes:)` and `basedOnSize`:** "The scrollable view bounces along the specified axis if the size of the content exceeeds the size of the scrollable view in that axis." At fit the strip is exactly as wide as the screen, so it does not move sideways.
+- **`scrollBounceBehavior(_:axes:)` and `basedOnSize`:** "The scrollable view bounces along the specified axis if the size of the content exceeeds the size of the scrollable view in that axis." At fit the strip is exactly as wide as the screen, so it does not move sideways. Since the final fix wave it also applies top to bottom (ruling 18; Apple's full text is under "Final review").
 - **`task(id:...)`:** "If the `id` value changes, SwiftUI cancels and restarts the task." This is how the cache is told the new Page at the top.
 - **`Image(decorative:scale:orientation:)`:** "SwiftUI ignores this image for accessibility purposes." Each slice is decorative, and the whole Page carries the "Page n of m" label.
 - **`MagnifyGesture`:** "A gesture that recognizes a magnification motion and tracks the amount of magnification." Used the same way as on a single Page.
@@ -908,6 +923,250 @@ Gate: `./scripts/test.sh macos`, then `SIMULATOR=F9304E8C-40F4-4962-A836-C10615C
 - No new measurement was made. The plan asked for a fresh measurement of an 800 x 12,000 sample Page dropped into a Book, and it was not repeated in Task 5. The memory table below uses Task 3's decoded sizes, measured on the Mac (including that 800 x 12,000 Page), and Task 4's on-screen figures, measured on the iPhone simulator for a 600 x 12,000 Page. A measurement on a device is on the check list (iPhone items 6 and 12).
 - The app was not run for this task; it changes documents only.
 
+## Final review
+
+After Task 5 a reviewing agent read the whole branch (every change from
+`f30a1d7` to `049b9fb`) against the design. It found nothing critical and judged
+the branch ready to merge once a short list was fixed. One fix wave did that
+list, in two commits. Terms for this section: a *bounce* is the strip giving
+under the finger when it is pulled past either end, and springing back when let
+go; the *Pages kept decoded* are, as in Task 4, every Page with any part on
+screen plus one more on each side; a *probe* is temporary logging added to see
+what the app does, removed before committing.
+
+### What the reviewer found, and what was done
+
+1. **Pages that come into view after a zoom out at the very top stayed blank.**
+   The strip worked out the Pages kept decoded only when the scroll view
+   reported a move. Zooming out at the very top of the strip, or making a Mac
+   window only wider or narrower there, leaves the strip at the top, so no
+   report came, and the Pages kept decoded were still the ones chosen for the
+   zoomed-in size until the reader scrolled. Done: after every change of width
+   or zoom the strip works out the Pages kept decoded for the new size itself.
+   This is code moving the strip, so it never changes the Page being read.
+2. **Two tall Pages could be decoded at once while a Mac window was resized.**
+   A new cache was made for every new width, and a decode still running in the
+   old one could overlap one in the new. Done: ruling 19, one cache for the
+   strip's whole life, told each new width.
+3. **The strip cache's prefetch had no caller.** Done: ruling 20, removed.
+4. **A Page that could not be cut into slices failed without a line in the
+   system log**, while every other Page that cannot be shown leaves one. Done:
+   it now logs "A Page could not be cut into slices", in the same form as the
+   others. The reader still sees the placeholder for that Page, as before.
+5. **A Book that fits on one screen saved the wrong Reading Position on a
+   bounce.** Done: ruling 18, such a strip does not bounce.
+
+Smaller items, all done:
+
+- The Page locations (where each Page is stored) are worked out once per Book,
+  the first time they are needed, not every time SwiftUI makes the reading
+  screen again.
+- Tests: one test of the cache now checks exactly what it holds after every
+  decode, where it allowed one Page more than it can hold; a new test checks
+  the width rule at exactly the budget and one byte below it; the shared
+  test-Page writer has a file of its own and `PageImageTests` uses its
+  drawing; writing a test Page stops the test at once if it fails.
+- Comments corrected: why a key turn in Vertical is not animated; what the
+  phase change records (it said the Page the reader stops on is "never
+  missed"); the per-Page budget, which is a target that row padding can exceed
+  by a fraction of a percent; `LibraryStorage.makeContainer(at:)`, which no
+  longer claims the upgrade step is what opens an old store; the version 1
+  store test, which says it also passes with no upgrade steps;
+  `Book.init(from:)`, which says every stored property must be read back
+  there. New comments call a Page a Page or a picture, not by the glossary's
+  words to avoid.
+- Documents: the owner's check list (Mac item 5 no longer suggests a Book of
+  small Pages, which would not work because the strip scales Pages to the
+  window's width; new Mac items 15 to 17 and iPhone items 15 to 17), the
+  rulings, the deferred items, the ledger's place, and both logs' Commits
+  tables.
+
+### Reproduced first, then checked after the fix
+
+On the iPhone 17 Pro simulator, iOS 26.5, driven with `sim-use`, which sends
+taps and swipes to the simulator only. Each defect was first reproduced with the
+code as it was at `049b9fb`, built from a separate copy of the repository
+outside this checkout, then checked with the fixed code. The numbers come from a
+probe in both copies; the committed code has none.
+
+**Zoom out at the very top (item 1).** Strip Short: 12 Pages of 1,600 x 900
+pixels, each 226 points tall at fit, so four are on the 874-point screen.
+
+| Step | At `049b9fb` | Fixed |
+|---|---|---|
+| At the top, at fit | Pages 1 to 4 shown; Pages kept decoded: 1 to 5 | the same |
+| Double tap to 2.5x (each Page 565 points tall) | no report; still 1 to 5 | worked out at once: 1 to 3 |
+| Pan sideways a little (the start and end of the pan carry the position) | 1 to 3 | 1 to 3 |
+| Double tap back to fit | no report; still 1 to 3. Page 4's place, the bottom 196 points of the screen, stayed black, and was still black 3 s later | worked out at once: 1 to 5; Pages 4 and 5 decoded straight away and Page 4 was on screen |
+| The same with a pinch to 2.5x and back | not tried | the Pages kept decoded followed every step of the pinch (3, then 4, then 5 Pages), and Page 4 was on screen at fit |
+
+No Page turn was saved during any of these.
+
+**A Book that fits on one screen (item 5).** Strip Two: two 1,600 x 900 Pages,
+452 points tall together, which the strip shows in the middle of the 874-point
+screen (211 points down).
+
+| Step | At `049b9fb` | Fixed |
+|---|---|---|
+| Drag up 350 points | the strip was pulled to 138.7 points and sprang back. On the way the counter went to Page 2 and Page 2 was saved; at rest Page 1 was saved again | no movement and no report at all; the Pages stayed 211 and 437 points down |
+| Drag down 400 points | not tried | the same: no movement, no report |
+| Counter, then the Library card | | "Page 1 of 2" and "Page 1 of 2"; nothing saved |
+
+A taller Book still bounces: Strip Short pulled down at its top went to -138.7
+points and back to 0, with nothing saved. Strip Two zoomed to 2.5x is 1,131
+points tall: it scrolls again and bounces past its end (reached 363.7 points
+against an end at 256.7), and at its end the end-of-strip rule showed and saved
+Page 2, as the design says for a strip taller than the screen.
+
+**Nothing else moved.** Strip Mixed at its very end, double tap in and out: the
+top of the screen was 64 of 603 points into Page 22 at fit (10.6%), 160 of 1,507
+at 2.5x (10.6%), and the end of the strip again at fit, as in Task 4's fix round
+2. Nothing was saved.
+
+**Observed, older than these fixes.** Zooming a strip shorter than the screen
+lands in the middle of the zoomed Pages, not at their top: Strip One (one
+800 x 1,200 Page, 603 points tall) zoomed to 2.5x showed the Page from 317 points
+into it, the same at `049b9fb` and with the fixes. While such a short strip is
+on screen the scroll view also reported its visible height as 1,085 points, not
+the screen's 874. Neither is documented; both are covered by the ruling to leave
+a short strip centred (below).
+
+### Apple documentation relied on
+
+Fetched on 2026-11-09 from
+`developer.apple.com/tutorials/data/documentation/<path>.json`.
+
+- **`scrollBounceBehavior(_:axes:)`** (`swiftui/view/scrollbouncebehavior(_:axes:)`):
+  - "Configures the bounce behavior of scrollable views along the specified axis."
+  - "Use this modifier to indicate whether scrollable views bounce when people
+    scroll to the end of the view's content, taking into account the relative
+    sizes of the view and its content."
+  - `axes`: "The set of axes to apply `behavior` to. The default is [vertical]."
+  - "The modifier passes the scroll bounce mode through the Environment, which
+    means that the mode affects any scrollable views in the modified view
+    hierarchy."
+- **`ScrollBounceBehavior`** (`swiftui/scrollbouncebehavior`): "The ways that a
+  scrollable view can bounce when it reaches the end of its content." and "You
+  can configure each scrollable axis to use a different bounce mode."
+- **`basedOnSize`** (`swiftui/scrollbouncebehavior/basedonsize`): "The
+  scrollable view bounces when its content is large enough to require
+  scrolling." and "The scrollable view bounces along the specified axis if the
+  size of the content exceeeds the size of the scrollable view in that axis."
+  (Apple's spelling.) **`automatic`**: "By default, scrollable views use the
+  always behavior." **`always`**: "The scrollable view always bounces along the
+  specified axis, regardless of the size of the content."
+
+  The strip names both directions in one call. Apple documents `axes` as a set,
+  but does not say how two calls for different directions combine, so the
+  strip does not rely on that. That a strip which does not bounce sends no
+  report while dragged is observed (above), not documented.
+- **`onScrollGeometryChange(for:of:action:)`**, already quoted in Task 4: the
+  action "is called whenever the data type changes". This is why a zoom that
+  leaves the strip at the same offset, with the same visible height, brings no
+  report (item 1).
+- **`task(id:name:priority:file:line:_:)`** (`swiftui/view/task(id:name:priority:file:line:_:)`): "If the
+  `id` value changes, SwiftUI cancels and restarts the task." and "The task is
+  created by `Task.immediate`. Its action begins execution synchronously until
+  it suspends at the first `await`." The strip tells the cache each new width
+  from such a task, restarted for every width.
+- **`Task.isCancelled`** (`swift/task/iscancelled-swift.type.property`): "After
+  the value of this property becomes `true`, it remains `true` indefinitely."
+- **Swift Evolution SE-0306, Actors** (`swiftlang/swift-evolution`,
+  `proposals/0306-actors.md`, read with `gh`): "tasks awaiting an actor are
+  **not** guaranteed to be run in the same order they originally awaited that
+  actor." So when a newer width cancels the task that was telling the cache an
+  older one, the older call may still reach the cache after the newer. The
+  cache ignores a width change from a cancelled task, so the newer width
+  stays, and the strip asks again for Pages only once the cache has taken it.
+- **`State`** (`swiftui/state`, the property wrapper used up to Xcode 26): "A
+  `State` property always instantiates its default value when SwiftUI
+  instantiates the view. For this reason, avoid side effects and
+  performance-intensive work when initializing the default value." **`State()`**
+  (`swiftui/state()`, the macro used from Xcode 27, which this project builds
+  with): "A `State()` property instantiates its default value the first time
+  SwiftUI instantiates the view." The reading screen keeps the Page locations
+  in a small holder kept in `State` that works them out the first time they are
+  asked for, so they are worked out once whichever of the two is in use.
+
+### Tests
+
+- **`SlicedPageCacheTests`**, rewritten around the two calls the strip makes,
+  `slices(at:)` and `retain(top:)`:
+  - with the top Page retained, a Page over the budget is kept until the next
+    decode, which releases it (replaces the prefetch test);
+  - after every decode the cache holds exactly the top Page, the next and the
+    Page just handed back, checked in bytes after each of four decodes (replaces
+    the loose bound of one Page more);
+  - new: a width change lets go of every Page held, the next read decodes again
+    at the new width, and the width already in use changes nothing;
+  - new: a width change from a cancelled task changes nothing;
+  - new: reads on either side of width changes decode one at a time: twelve
+    reads and width changes run at once, and the cache's count of the most
+    decodes running together stays 1.
+- **`SlicedPageTests.budgetBoundary`** (new): at a budget of exactly
+  1,179 x 15,720 x 4 bytes the width is 1,179; one byte less gives 1,178.
+- Red, then green:
+  - with the tests written and the code unchanged, the test target did not
+    compile ("extra argument 'widthPixels' in call", "value of type
+    'SlicedPageCache' has no member 'changeWidth'");
+  - with a stand-in that accepted a width change and did nothing, the
+    width-change and one-at-a-time tests failed (5 failed expectations);
+  - with the width change but without the check for a cancelled task, that
+    test failed (2 failed expectations);
+  - with the check, all passed. With the decode moved off the cache for a
+    moment, as a check that the one-at-a-time test can fail, it did fail (the
+    count was above 1); that edit was reverted.
+- The width-rule boundary test and the rewritten budget tests passed against
+  the existing rule; they describe behaviour that was already right.
+- The app tests on the Mac went from 118 to 122.
+
+### Gate
+
+- `./scripts/format.sh`, then `./scripts/format.sh --check`: clean.
+- `./scripts/test.sh macos` while working: 122 app tests and FolioCore's 90
+  passed.
+- `SIMULATOR=F9304E8C-40F4-4962-A836-C10615C7DC16 SKIP_LAUNCH=1 ./scripts/verify.sh`:
+  green. Format clean; iOS and macOS builds succeeded; FolioCore's 90 tests
+  passed before each platform's app tests, which passed on iOS and on macOS
+  (122). The launch step was skipped because on macOS it takes a picture of the
+  whole desktop, which is the owner's screen.
+- The warnings left are the ones there before this wave: the `displayScale`
+  warning in `ReadingView.swift` (line 95 at the review, line 102 now, because
+  of the lines added above it) and three in `LibraryWindowTests`.
+
+### The reviewer's open questions, and the controller's rulings
+
+The reviewer listed some things it did not judge. The controller ruled on each:
+
+- **No Reading Mode command in the Mac menu bar.** The design places the control
+  in the toolbar. Left as it is, although the Human Interface Guidelines ask
+  for every toolbar item to be a menu command too.
+- **A strip shorter than the screen sits in the middle of the screen**, not at
+  its top. The design says nothing about it. Left.
+- **One Page is decoded for nothing when a Book opens in Vertical** (about 2.9
+  million bytes in the case measured). Left.
+- **How sharp Pages are while zoomed** is the same as in Page by Page. Left.
+- **The strip moves back to the middle, left to right, on every zoom step.**
+  Documented, and on the owner's list (iPhone item 10).
+- **A Book that fails to reopen for another reason than being gone** keeps the
+  copy the screen already had. An earlier ruling; left.
+- **The warning in `ReadingView.swift` that does not fail the build**, although
+  the settings say warnings are errors. It is on the main branch too and is not
+  part of this work; the setting that should turn warnings into errors does not
+  catch it, which is worth a separate look.
+- **The closing lines of each commit** (ruling 1): a matter of process. Left.
+- **The mouse wheel, the trackpad and the keys on the Mac**: on the owner's
+  list.
+- **Whether a real phone stops exactly on a Page's top**, to the pixel: on the
+  owner's list (iPhone item 17).
+
+### Not checked
+
+- Everything on the Mac, including the new Mac items 15 to 17: no input of any
+  kind was sent to the Mac (ruling 7).
+- Turning an iPhone or iPad while reading Vertical.
+- Anything on an iPad or a real device.
+
 ## Memory for tall Pages
 
 Measured in Tasks 3 and 4; nothing here was measured on a device. The plan's fresh measurement of an 800 x 12,000 sample Page in a Book was not repeated in Task 5: the 800 x 12,000 figures below are Task 3's decoded sizes on the Mac, the on-screen figures are Task 4's for a 600 x 12,000 Page on the iPhone simulator, and a measurement on a device is on the check list (iPhone items 6 and 12). *Slices held* is the cache's own count of the bytes of the bands it keeps (rows times bytes per row). *The app's memory* is what `footprint` reports. A MB here is 1,048,576 bytes, the unit the budgets are set in, so 96 MB is 100,663,296 bytes.
@@ -933,7 +1192,7 @@ What this means for a reader:
 
 ## Rulings made on the owner's behalf
 
-Every ruling the controller (the agent that coordinated the implementation tasks) made during this slice, taken from its running record, the ledger (`.superpowers/sdd/2026-11-09-reading-mode/progress.md`). Each is in plain words, with what you would see if it was wrong. The *brief* is the written instructions each task was given.
+Every ruling the controller (the agent that coordinated the implementation tasks) made during this slice. Its running record of them, the *ledger*, is the controller's working notes, kept outside the repository (in `.superpowers/sdd/2026-11-09-reading-mode/`, a folder git does not track); this log restates every ruling from it, so nothing here depends on that file. Each is in plain words, with what you would see if it was wrong. The *brief* is the written instructions each task was given.
 
 **Ruling 1: the closing lines of each commit message.** Every commit ends with the two lines the owner pasted, naming "Claude Fable 5.1" and this session, not the lines the tool suggests. If wrong: only those two lines of text in each commit are off (the agents that did the work ran on other models than the one named). Nothing in the app is affected.
 
@@ -985,6 +1244,14 @@ If wrong: each Page differs from its true proportions by under one pixel.
 
 **Ruling 16: the double tap zoom is not animated.** The double tap changes the zoom at once, so the strip already has its new size when it is moved to keep the reader's place. Apple says the scroll view "will clamp" a requested position to "the size of its actual content". With the animation, a double tap deep in the strip landed on another Page or a blank screen. No timer, delay or second move was added. If wrong: the double tap snaps instead of easing. The design leaves animation to the builder and does not require it.
 
+**Ruling 17: the owner's check list is Task 5's own result.** So check items that could not be done as written, or that said something was seen when it was not, were fixed in Task 5's review round rather than left for later, together with the out-of-date figures and the worst of the shorthand. If wrong: the documents are a little longer.
+
+**Ruling 18: a Book that fits on one screen does not bounce.** A *bounce* is the strip giving under the finger when it is pulled past either end, and springing back when let go. The top-of-the-screen rule reads the strip as "at its very end" whenever the bottom of the last Page is on screen, which for a Book that fits on one screen is true as soon as it is pulled at all. So one drag moved the counter to the last Page and saved it, then saved the first Page again as the strip sprang back. The strip now uses the setting Apple documents for this: it bounces top to bottom only when its Pages are taller than the screen, and sideways only when zoomed, as before. The design's rules stay as written. If wrong: a Book that fits on one screen does not give under the finger at all; a taller Book bounces as before. Mac item 17, iPhone item 16.
+
+**Ruling 19: one decode cache for the strip's whole life.** Before, every new width of the window made a new cache. While a Mac window is resized the old cache could still be decoding a Page while the new one started on another, so two tall Pages could be decoded at the same moment, which the design rules out ("decoded one at a time"). Now the strip has one cache from the moment its width is known. When the width changes, the cache lets go of every Page it holds and decodes at the new width from then on, still at the exact width, and every decode goes through it one after another. If wrong: nothing a reader sees; resizing a Mac window decodes one Page at a time. The cost was a change to the cache's calls and its tests.
+
+**Ruling 20: the strip's cache no longer decodes ahead by itself.** Its *prefetch*, decoding the Pages around the one being read before they are shown, was the plan's design. Since ruling 12 the strip asks for each Page on screen itself, and nothing in the app called the prefetch, so it was removed and its tests rewritten around the two calls the strip makes. Page by Page keeps its own prefetch. If wrong: nothing; nothing called it.
+
 ### Items left for later
 
 The ledger also holds notes deferred to Task 5 or to a final round of code fixes. Each is listed here with where it stands and what a user would see if it were left.
@@ -1007,10 +1274,10 @@ Done in Task 5 (this log's wording; see "Task 5: What Changed"):
 On the owner's check list:
 
 - Mac: whether the up and down arrows and Page Up and Page Down scroll the strip, and whether the counter follows (Mac item 9).
-- Mac: resizing a window in Vertical (Mac item 11). The cache is rebuilt at every pixel of width change, so decodes repeat while dragging, and an old decode can overlap a new one. If left: resizing may stutter or show blank Pages until you stop.
+- Mac: resizing a window in Vertical (Mac items 11 and 15). Since the final fix wave one cache serves the strip, so decodes stay one at a time while you drag, and Pages that come into view at the top are decoded without a scroll (ruling 19, final review item 1). They are still decoded again at every new width. If unchecked: resizing may stutter until you stop.
 - A two-finger pinch on a real phone, moving while pinching, and zooming out past fit, which was not tried on the simulator (iPhone item 9). The ledger's "letting go below fit" cannot be seen: the code holds the zoom at fit during the pinch, so what can be checked is that zooming out stops at fit.
 
-For the final round of code fixes (not done; this task changes documents only):
+For the final round of code fixes. The final fix wave did every one of these (see "Final review") except the two marked "still open":
 
 - **Reading a saved Book back.** The code that turns a Book's saved form back into a Book (`Book.init(from:)`) is written out field by field and needs a comment to keep it in step with the Book's fields. If left: a setting added to a Book later could silently come back as its default after a relaunch.
 - **The comment on `LibraryStorage.makeContainer(at:)`.** It says the upgrade stage makes an old store open, which the test could not show. If left: nothing a user sees; a later change might rely on the stage more than the evidence allows.
@@ -1021,13 +1288,13 @@ For the final round of code fixes (not done; this task changes documents only):
 - **Missing tests.**
   - The width rule exactly at the budget. Nothing a user sees.
   - The order in which the strip's cache decodes during a prefetch has no test of its own, and one test's bound is loose. If left: nothing a reader sees today, because nothing in the app calls that prefetch (`SlicedPageCache.prefetch(around:)`); only the tests do. The strip asks the cache for each Page on screen itself.
-  - The rule that only the reader's scrolling counts, and the check that skips a jump to the Page already at the top, live inside the screen's code with no test of their own; moving them into a small piece of code of their own, outside the screen, would let tests check them. If left: a later change could bring back a swallowed jump without any test failing.
-- **Two small differences from the brief.** The strip's geometry, once worked out, cannot be changed afterwards, where the brief described it as changeable; and the cache's prefetch makes whatever calls it wait until it finishes, where it could have been written not to. Recorded, no change planned; nothing a user sees (and nothing in the app calls that prefetch).
+  - Still open: the rule that only the reader's scrolling counts, and the check that skips a jump to the Page already at the top, live inside the screen's code with no test of their own; moving them into a small piece of code of their own, outside the screen, would let tests check them. If left: a later change could bring back a swallowed jump without any test failing.
+- **Still open: two small differences from the brief.** The strip's geometry, once worked out, cannot be changed afterwards, where the brief described it as changeable; and the cache's prefetch made whatever called it wait until it finished, where it could have been written not to. Recorded, no change planned; nothing a user sees. The prefetch is now gone (ruling 20), so only the first difference remains.
 - **Two code comments.** One gives the wrong reason (`turn(by:)` in `ReadingView`). One says too much: in `VerticalStripView`, a jump made while the strip coasts is recorded when the coasting ends. Nothing a user sees.
 - **The list of Page locations.** `ReadingView` rebuilds it (1,000 entries for a 1,000-Page Book) each time SwiftUI re-creates the screen; it should be made once. If left: a little extra work on each redraw in very long Books; not measured.
 - **Which Pages are decoded after a zoom.** This is worked out only when the scroll view reports a move. A width or zoom change that leaves the scroll position where it was keeps the Pages chosen for the old size; the final reviewer is to check whether this still matters after ruling 16. If left: after zooming out where the position does not change (at the very top of the strip), a Page that came on screen might stay blank until the next scroll.
 
-Noted by the implementers, with no ruling yet:
+Noted by the implementers; the controller ruled on each after the final review (see "Final review"):
 
 - The Human Interface Guidelines say every Mac toolbar item should also be a menu bar command; there is no Reading Mode menu command. If left: on the Mac the Reading Mode can be chosen only from the toolbar.
 - A warning in `ReadingView.swift`, there before this slice, does not fail the build although the settings say warnings are errors. If left: nothing a user sees, but the warnings-as-errors rule is not enforced for that kind of warning.
@@ -1046,4 +1313,6 @@ Noted by the implementers, with no ruling yet:
 | 43f8746 | fix(reading): the strip counts only the reader's scrolling, keeps their place inside a Page when zoomed, and snaps Page heights to the pixel grid |
 | 466ac34 | fix(reading): double tap zoom keeps the reader's place by not animating the size change |
 | 4d01b80 | docs(reading): record the Reading Mode rulings and the owner's check list |
-| (this) | docs(reading): correct the owner's check list and label observed behaviour as observed |
+| 049b9fb | docs(reading): correct the owner's check list and label observed behaviour as observed |
+| 36a035e | fix(reading): one decode cache for the strip, a fresh decode window after every size change, no bounce on a one-screen Book |
+| (this) | docs(reading): record the final review, the last three rulings and the extra check items |
