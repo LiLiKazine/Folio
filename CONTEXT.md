@@ -45,6 +45,13 @@ _Avoid_: thumbnail
 The Page a reader was last on in a Book.
 _Avoid_: progress, bookmark, last read
 
+**Reading Mode**:
+How a Book's Pages are laid out while reading. Page by Page shows one Page at
+a time, turned by swiping; Vertical stacks every Page into one strip scrolled
+top to bottom. A Book remembers its Reading Mode; a Book that has none reads
+Page by Page.
+_Avoid_: layout, view mode, scroll mode, webtoon
+
 **Notice**:
 A message the Library shows the user about an action that could not be
 completed, naming what failed and, when the user can do something about it,
@@ -85,6 +92,9 @@ A Book was opened by the reader; the basis for Library order.
 
 **ReadingPositionChanged**:
 A Book's Reading Position moved to a Page because the reader turned to it.
+
+**ReadingModeChanged**:
+A Book's Reading Mode changed because the reader chose a different one.
 
 **BookRemoved**:
 A Book and all its Pages have left the Library.
