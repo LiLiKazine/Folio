@@ -1,6 +1,6 @@
 # 2026-11-11-03: Importing several Sources at once — implementation
 
-**Status:** In progress (Task 1 of 3 done). Everything on the Mac and on a real
+**Status:** In progress (Tasks 1 and 2 of 3 done). Everything on the Mac and on a real
 device is unchecked. On iPhone and iPad the picker was seen working on
 simulators only.
 
@@ -147,9 +147,68 @@ Everything on the Mac, a real device, VoiceOver, the Import cards while the Impo
 were still waiting, an iPad folder-and-zip mix, and a picker that delivers several
 folders (the design records that the Mac's picker was never tried).
 
+## Task 2: The Mac drop target takes several Sources
+
+### What Changed
+
+- `app/Folio/Library/LibraryDropTarget.swift`: `sources(in:)` replaces
+  `source(in:)`. It returns the dropped URLs unchanged and in the order received
+  when the drop is not empty and every item is a folder or a zip (the extension's
+  case ignored), and nothing otherwise, so one item that is neither refuses the
+  whole drop. The drop handler passes the whole list to `onImport`, now typed
+  `([URL]) -> Void`. The type's comment, the function's comment and the
+  modifier's comment say several. A drop that is refused returns false from the
+  drop handler, as a single unsupported item always did, so it springs back and
+  nothing is imported.
+- `app/Folio/Library/LibraryWindow.swift`: the drop target is given
+  `importSources` directly, replacing the one-Source stand-in from Task 1.
+- `app/FolioTests/LibraryDropTargetTests.swift`: the tests moved to
+  `sources(in:)`. "Several URLs are rejected, even if each would be a Source" was
+  replaced by its opposite ("several folders and zips are Sources, in the drop's
+  order"), and a new test pins that a drop holding anything else is rejected whole
+  (a zip, a picture and a folder give nothing).
+
+### Tests
+
+Red, then green: the rewritten tests failed to compile (`sources(in:)` not found)
+and passed once it existed. The suite "Library drop target" has eight tests: one
+folder; one zip in any case; one that is neither; several folders and zips in
+order; a drop with anything else rejected whole; a real folder without a trailing
+slash; a real file with no extension rejected; an empty drop rejected. Full runs:
+`./scripts/test.sh` passes on iOS and macOS (the app: 140 tests on macOS), FolioCore
+107, `./scripts/format.sh --check` clean.
+
+### Apple documentation relied on
+
+`swiftui/view/dropdestination(for:action:istargeted:)`:
+
+- "A closure that takes the dropped content and responds appropriately. The first
+  parameter to action contains the dropped items. The second parameter contains the
+  drop location in this view's coordinate space. Return true if the drop operation
+  was successful; otherwise, return false." The handler returns false for a drop
+  it refuses and true for one it hands over.
+- "The dropped content can be provided as binary data, file URLs, or file
+  promises." The drop target asks for URLs, as it did before.
+
+### What the documentation does not say (observed)
+
+- Whether the order of the dropped items matches the order they were arranged in
+  Finder is not documented. Folio uses the order the system gives the closure.
+- That a refused drop visibly springs back is not stated on that page; it is how a
+  single unsupported item has always behaved here and is on the owner's list.
+
+### Not checked
+
+All of it. The drop target only exists on the Mac and no agent sends input to the
+owner's Mac, so dropping several folders and zips, the refusal of a drop with a
+picture among them, the order the Imports run in, and dropping exactly one Source
+are on the owner's check list as not checked. The rule for which URLs are Sources
+is covered by the unit tests above.
+
 ## Commits
 
 | Commit | Subject |
 | --- | --- |
 | c58d5b0 (main) | docs(import): the design and plan for importing several Sources at once |
-| (this) | feat(import): the file picker takes several Sources and each becomes its own Import |
+| bedcf2c | feat(import): the file picker takes several Sources and each becomes its own Import |
+| (this) | feat(import): several folders and zips dropped on the Mac's Library window are each imported |

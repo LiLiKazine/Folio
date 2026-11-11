@@ -1,22 +1,22 @@
 #if os(macOS)
     import SwiftUI
 
-    /// Lets the user drop one folder or zip onto the Library to Import it.
+    /// Lets the user drop several folders and zips onto the Library to Import each.
     ///
-    /// Anything else (several URLs, or one that is neither) is rejected and the
-    /// drop is refused. While a drag hovers over the Library, a subtle accent-colour
-    /// outline shows where it will land.
+    /// A drop that is empty, or holds anything that is neither a folder nor a zip, is
+    /// rejected whole and the drop is refused; nothing is Imported. While a drag hovers
+    /// over the Library, a subtle accent-colour outline shows where it will land.
     struct LibraryDropTarget: ViewModifier {
-        /// Called with the Source to Import when a drop is accepted.
-        let onImport: (URL) -> Void
+        /// Called with the Sources to Import, in the drop's order, when a drop is accepted.
+        let onImport: ([URL]) -> Void
 
         @State private var isTargeted = false
 
         func body(content: Content) -> some View {
             content
                 .dropDestination(for: URL.self) { urls, _ in
-                    guard let source = Self.source(in: urls) else { return false }
-                    onImport(source)
+                    guard let sources = Self.sources(in: urls) else { return false }
+                    onImport(sources)
                     return true
                 } isTargeted: {
                     isTargeted = $0
@@ -34,13 +34,14 @@
                 }
         }
 
-        /// The Source in a drop, or nil when the drop is not exactly one folder or zip.
-        nonisolated static func source(in urls: [URL]) -> URL? {
-            guard urls.count == 1, let url = urls.first else { return nil }
-            if isFolder(url) || url.pathExtension.lowercased() == "zip" {
-                return url
+        /// The Sources in a drop, in the drop's order, or nil when the drop is empty or
+        /// holds anything that is not a folder or zip.
+        nonisolated static func sources(in urls: [URL]) -> [URL]? {
+            guard !urls.isEmpty else { return nil }
+            let isEverySource = urls.allSatisfy {
+                isFolder($0) || $0.pathExtension.lowercased() == "zip"
             }
-            return nil
+            return isEverySource ? urls : nil
         }
 
         /// A dropped folder's URL need not end in "/", so ask the file system too.
@@ -53,8 +54,8 @@
     }
 
     extension View {
-        /// Accepts a dropped folder or zip as a Source to Import.
-        func libraryDropTarget(onImport: @escaping (URL) -> Void) -> some View {
+        /// Accepts dropped folders and zips as Sources to Import, one Import each.
+        func libraryDropTarget(onImport: @escaping ([URL]) -> Void) -> some View {
             modifier(LibraryDropTarget(onImport: onImport))
         }
     }

@@ -49,7 +49,7 @@ struct LibraryWindow: View {
                     Task { await model.chooseLibraryOrder(order) }
                 }
             )
-            .libraryDropTarget { importSources([$0]) }
+            .libraryDropTarget(onImport: importSources)
         #endif
         .background { dialogHost }
         .onChange(of: model.presentedNotice?.id, initial: true) { requestPresentedNotice() }
