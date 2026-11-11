@@ -786,7 +786,9 @@ version, which adds one record kind holding the Library Order, with at most one
 record. The upgrade is lightweight, which means SwiftData (Apple's storage
 framework) carries the saved data across itself with no code of ours; that it
 does so for this change is observed in tests, and Apple's Core Data page on the
-subject (not SwiftData's) says adding a record kind is such a change. What a
+subject (Core Data is Apple's older database framework, which SwiftData is built
+on; this is its page, not SwiftData's) is the closest support, a sentence about
+adding, removing and renaming record kinds in a hierarchy. What a
 user experiences: a Library saved by the previous version opens with every Book
 in place and in Recent, Descending, and the choice survives quitting and
 relaunching. On the Mac, two windows show the same Library Order, and choosing
@@ -802,7 +804,7 @@ that order). Date Imported: the moment the Book's Import began copying Pages,
 which every Book already stores. Books the Sort cannot tell apart (the same
 Title, or the same time) are put in order by the time they were imported and
 then by their identifier, so the grid never shuffles between loads, and
-Descending is exactly Ascending reversed. What the user experiences: nothing a
+Descending is exactly the Ascending list read from the other end. What the user experiences: nothing a
 reader does moves a Book under Date Imported; under Title a Book moves only
 when it is renamed (it moves when the rename is saved) and a new Book appears at
 its place by Title; under Recent a Book that was opened comes first (Descending)
