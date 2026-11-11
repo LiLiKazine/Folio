@@ -235,7 +235,7 @@ import UniformTypeIdentifiers
         defer { task.cancel() }
 
         let source = try makeImageSource(named: "Volume One", pageCount: 3, in: fixture.root)
-        await model.importSource(source)
+        await model.importSources([source])
 
         try await waitUntil("one Book is the only item") {
             model.items.count == 1 && books(in: model.items).count == 1
@@ -252,6 +252,145 @@ import UniformTypeIdentifiers
         #expect(model.notices.isEmpty)
     }
 
+    /// Import storage that cannot save an Import and counts how many times it was asked
+    /// to, so a test can show that every Source was still tried.
+    private actor CountingUnsavableImportRepository: ImportRepository {
+        private let base = InMemoryImportRepository()
+        private(set) var addAttempts = 0
+
+        func imports(status: ImportStatus) async throws -> [Import] {
+            try await base.imports(status: status)
+        }
+
+        func importRecord(id: ImportID) async throws -> Import? {
+            try await base.importRecord(id: id)
+        }
+
+        func add(_ record: Import) async throws {
+            addAttempts += 1
+            throw RepositoryFailure()
+        }
+
+        func update(_ record: Import) async throws { try await base.update(record) }
+        func remove(id: ImportID) async throws { try await base.remove(id: id) }
+    }
+
+    /// Source access that cannot reference the folders named `names`, and the URLs of
+    /// those folders, which do not exist on disk.
+    private func unreferenceableSources(
+        named names: [String]
+    ) -> (
+        access: InMemorySourceAccess, urls: [URL]
+    ) {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "LibraryModelTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        let urls = names.map { root.appending(path: $0, directoryHint: .isDirectory) }
+        var access = InMemorySourceAccess()
+        access.unbookmarkable = Set(urls.map(\.path))
+        return (access, urls)
+    }
+
+    @Test("several Sources become Imports in the order given, and each a Book")
+    func importSeveral() async throws {
+        let imports = InMemoryImportRepository()
+        let fixture = try makeFixture(imports: imports)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+        let task = try await startModel(model)
+        defer { task.cancel() }
+        let c = try makeImageSource(named: "C", pageCount: 1, in: fixture.root)
+        let a = try makeImageSource(named: "A", pageCount: 1, in: fixture.root)
+        let b = try makeImageSource(named: "B", pageCount: 1, in: fixture.root)
+
+        await model.importSources([c, a, b])
+
+        try await waitUntil("three Books") { books(in: model.items).count == 3 }
+        // The repository returns Imports by creation time, earliest first.
+        #expect(try await imports.imports(status: .completed).map(\.title) == ["C", "A", "B"])
+        #expect(model.notices.isEmpty)
+    }
+
+    @Test("a Source that cannot be referenced gets its Notice and the rest are still imported")
+    func importSeveralOneUnavailable() async throws {
+        let imports = InMemoryImportRepository()
+        let unreferenceable = unreferenceableSources(named: ["Vol 3"])
+        let fixture = try makeFixture(imports: imports, sourceAccess: unreferenceable.access)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+        let task = try await startModel(model)
+        defer { task.cancel() }
+        let first = try makeImageSource(named: "First", pageCount: 1, in: fixture.root)
+        let last = try makeImageSource(named: "Last", pageCount: 1, in: fixture.root)
+
+        await model.importSources([first, unreferenceable.urls[0], last])
+
+        #expect(
+            copy(of: model.notices) == [
+                [
+                    "Couldn't Import “Vol 3”",
+                    "Folio couldn't open the folder or zip. Pick it again from the file picker.",
+                ]
+            ])
+        try await waitUntil("two Books") { books(in: model.items).count == 2 }
+        #expect(try await imports.imports(status: .completed).map(\.title) == ["First", "Last"])
+    }
+
+    @Test("two Sources that cannot be referenced get one Notice each, in order")
+    func importSeveralTwoUnavailable() async throws {
+        let unreferenceable = unreferenceableSources(named: ["Vol 3", "Vol 4"])
+        let fixture = try makeFixture(sourceAccess: unreferenceable.access)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+
+        await model.importSources(unreferenceable.urls)
+
+        #expect(
+            model.notices.map(\.title) == ["Couldn't Import “Vol 3”", "Couldn't Import “Vol 4”"])
+    }
+
+    @Test(
+        "several Sources while the Library cannot save an Import give one Couldn't Import Notice and no Imports"
+    )
+    func importSeveralCannotSave() async throws {
+        let imports = CountingUnsavableImportRepository()
+        let fixture = try makeFixture(imports: imports)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+        let task = try await startModel(model)
+        defer { task.cancel() }
+        let a = try makeImageSource(named: "A", pageCount: 1, in: fixture.root)
+        let b = try makeImageSource(named: "B", pageCount: 1, in: fixture.root)
+        let c = try makeImageSource(named: "C", pageCount: 1, in: fixture.root)
+
+        await model.importSources([a, b, c])
+
+        // Every Source was tried, and the three identical failures show once.
+        #expect(await imports.addAttempts == 3)
+        #expect(
+            copy(of: model.notices) == [
+                [
+                    "Couldn't Import",
+                    "Folio couldn't save the change. Try again; if it keeps happening, relaunch Folio.",
+                ]
+            ])
+        #expect(model.items.isEmpty)
+    }
+
+    @Test("no Sources does nothing") func importNone() async throws {
+        let imports = InMemoryImportRepository()
+        let fixture = try makeFixture(imports: imports)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let model = fixture.model
+        let task = try await startModel(model)
+        defer { task.cancel() }
+
+        await model.importSources([])
+
+        #expect(model.notices.isEmpty)
+        #expect(model.items.isEmpty)
+        #expect(try await imports.imports(status: .queued).isEmpty)
+    }
+
     @Test("a failing Import queues its Notice and keeps the Import item")
     func failure() async throws {
         let fixture = try makeFixture()
@@ -263,7 +402,7 @@ import UniformTypeIdentifiers
         let source = fixture.root.appending(path: "Notes", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
         try Data("not a Page".utf8).write(to: source.appending(path: "readme.txt"))
-        await model.importSource(source)
+        await model.importSources([source])
 
         try await waitUntil("the Notice is queued") { model.presentedNotice != nil }
         let notice = try #require(model.presentedNotice)
@@ -293,9 +432,9 @@ import UniformTypeIdentifiers
         defer { task.cancel() }
 
         // Each ImportQueued reload is the only one that can show that many items.
-        await model.importSource(try makeEmptySource(named: "Notes", in: fixture.root))
+        await model.importSources([try makeEmptySource(named: "Notes", in: fixture.root)])
         try await waitUntil("the Notes Import is an item") { model.items.count == 1 }
-        await model.importSource(try makeEmptySource(named: "Later", in: fixture.root))
+        await model.importSources([try makeEmptySource(named: "Later", in: fixture.root)])
         try await waitUntil("both Imports are items") { model.items.count == 2 }
         // From here every reload fails; both Imports then fail with no images found,
         // Notes first. The events are handled in order, so once the Later Notice is
@@ -321,8 +460,12 @@ import UniformTypeIdentifiers
         let task = try await startModel(model)
         defer { task.cancel() }
 
-        await model.importSource(try makeImageSource(named: "Held", pageCount: 1, in: fixture.root))
-        await model.importSource(try makeImageSource(named: "Next", pageCount: 1, in: fixture.root))
+        await model.importSources([
+            try makeImageSource(named: "Held", pageCount: 1, in: fixture.root)
+        ])
+        await model.importSources([
+            try makeImageSource(named: "Next", pageCount: 1, in: fixture.root)
+        ])
         // The In Progress write emits no event, so reload rather than wait for one; a
         // reload still pending can only bring the same or newer state.
         try await waitUntil("the items show one Import In Progress and one Queued") {
@@ -344,7 +487,7 @@ import UniformTypeIdentifiers
         // Import's Notice is queued, both cancellations have been handled; a Notice
         // for either would already be queued ahead of it.
         let empty = HeldSourceAccess.unheldSourceName
-        await model.importSource(try makeEmptySource(named: empty, in: fixture.root))
+        await model.importSources([try makeEmptySource(named: empty, in: fixture.root)])
         try await waitUntil("the \(empty) Import's Notice is queued") { !model.notices.isEmpty }
         #expect(copy(of: model.notices) == [["Couldn't Import “\(empty)”", "No images found"]])
 
@@ -373,11 +516,11 @@ import UniformTypeIdentifiers
 
         let older = try makeImageSource(named: "Older", pageCount: 1, in: fixture.root)
         let newer = try makeImageSource(named: "Newer", pageCount: 1, in: fixture.root)
-        await model.importSource(older)
+        await model.importSources([older])
         try await waitUntil("the older Book is in the Library") {
             books(in: model.items).map(\.title) == ["Older"]
         }
-        await model.importSource(newer)
+        await model.importSources([newer])
         try await waitUntil("both Books are in the Library, newest first") {
             model.items.count == 2 && books(in: model.items).map(\.title) == ["Newer", "Older"]
         }
@@ -698,7 +841,7 @@ import UniformTypeIdentifiers
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         let model = fixture.model
 
-        await model.importSource(source)
+        await model.importSources([source])
 
         #expect(
             copy(of: model.notices) == [
@@ -717,8 +860,9 @@ import UniformTypeIdentifiers
         let model = fixture.model
         let task = try await startModel(model)
         defer { task.cancel() }
-        await model.importSource(
-            try makeImageSource(named: "Vol 1", pageCount: 1, in: fixture.root))
+        await model.importSources([
+            try makeImageSource(named: "Vol 1", pageCount: 1, in: fixture.root)
+        ])
         try await waitUntil("the Book is in the Library") { books(in: model.items).count == 1 }
         let book = try #require(books(in: model.items).first)
 
@@ -804,8 +948,9 @@ import UniformTypeIdentifiers
 
         switch failure.operation {
         case .import:
-            await model.importSource(
-                fixture.root.appending(path: "Vol 3", directoryHint: .isDirectory))
+            await model.importSources([
+                fixture.root.appending(path: "Vol 3", directoryHint: .isDirectory)
+            ])
         case .cancelImport: await model.cancelImport(queued.id)
         case .retryImport: await model.retryImport(failed.id)
         case .removeImport: await model.removeImport(failed.id)
@@ -898,8 +1043,9 @@ import UniformTypeIdentifiers
 
         // The Import is saved, but the scheduler cannot read the queue.
         await imports.fail([.imports])
-        await model.importSource(
-            try makeImageSource(named: "Vol 1", pageCount: 1, in: fixture.root))
+        await model.importSources([
+            try makeImageSource(named: "Vol 1", pageCount: 1, in: fixture.root)
+        ])
 
         let expected = [
             "Couldn't Update the Library",

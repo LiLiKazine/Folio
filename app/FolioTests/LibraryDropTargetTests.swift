@@ -15,22 +15,27 @@
 
         @Test("one folder is a Source")
         func folderAccepted() {
-            #expect(LibraryDropTarget.source(in: [folder]) == folder)
+            #expect(LibraryDropTarget.sources(in: [folder]) == [folder])
         }
 
         @Test("one zip is a Source, whatever the extension's case")
         func zipAccepted() {
-            #expect(LibraryDropTarget.source(in: [zip]) == zip)
+            #expect(LibraryDropTarget.sources(in: [zip]) == [zip])
         }
 
         @Test("a URL that is neither a folder nor a zip is rejected")
         func otherFileRejected() {
-            #expect(LibraryDropTarget.source(in: [notASource]) == nil)
+            #expect(LibraryDropTarget.sources(in: [notASource]) == nil)
         }
 
-        @Test("several URLs are rejected, even if each would be a Source")
-        func severalRejected() {
-            #expect(LibraryDropTarget.source(in: [folder, zip]) == nil)
+        @Test("several folders and zips are Sources, in the drop's order")
+        func severalAccepted() {
+            #expect(LibraryDropTarget.sources(in: [zip, folder, zip]) == [zip, folder, zip])
+        }
+
+        @Test("a drop holding anything else is rejected whole")
+        func anythingElseRejectsTheWholeDrop() {
+            #expect(LibraryDropTarget.sources(in: [zip, notASource, folder]) == nil)
         }
 
         @Test("a real folder without a trailing slash is a Source")
@@ -43,7 +48,7 @@
             let url = URL(fileURLWithPath: path, isDirectory: false)
             #expect(!url.hasDirectoryPath)
 
-            #expect(LibraryDropTarget.source(in: [url]) == url)
+            #expect(LibraryDropTarget.sources(in: [url]) == [url])
         }
 
         @Test("a real file with no extension is rejected")
@@ -53,12 +58,12 @@
             try Data("not a Source".utf8).write(to: url)
             defer { try? FileManager.default.removeItem(at: url) }
 
-            #expect(LibraryDropTarget.source(in: [url]) == nil)
+            #expect(LibraryDropTarget.sources(in: [url]) == nil)
         }
 
         @Test("an empty drop is rejected")
         func emptyRejected() {
-            #expect(LibraryDropTarget.source(in: []) == nil)
+            #expect(LibraryDropTarget.sources(in: []) == nil)
         }
     }
 #endif

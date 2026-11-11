@@ -859,3 +859,89 @@ dimming are unchecked), what VoiceOver says, a failed save seen in the running
 app (a test forces it and checks the Notice), the iPhone in landscape, iPad
 split screen, and any real device. The owner's check list is in the
 implementation log.
+
+## 2026-11-11: Importing several Sources at once
+
+The reader can now bring in several Sources in one go. Terms used here: the *file
+picker* is the system screen Folio shows so the reader can choose Sources;
+*ticking* is choosing a Source in that picker by tapping it, and the Open button
+then confirms every ticked Source at once. The record of the work, with Apple's
+text for every behaviour relied on, what was seen on which simulator and the
+owner's check list, is `docs/logs/2026-11-11-03-import-several-sources.md`.
+
+**Several Sources can be ticked or dropped at once, and each becomes its own
+Import.** An Import is still one Source becoming one Book, so ticking ten zips
+gives ten Import cards, the first In Progress and nine Queued, and ten Books
+arriving one after another. Each is exactly what picking that Source alone would
+have made. What the user experiences: on iPhone, iPad and Mac, tick several zips in
+the file picker and press Open once; on the Mac, drop several folders and zips on
+the Library window. Importing the same Source again still makes another Import and
+another Book. There is no limit and no warning for many Sources.
+
+**On iPhone and iPad the file picker ticks zips, never folders; a folder is picked
+one at a time, as before.** A test build of the system picker on the iPhone 17 Pro
+simulator (iOS 26.5) showed that tapping a folder opens it instead of ticking it,
+and "Select All" ticks the zips and no folder. A folder is picked by going into it
+and pressing Open, which delivers that one folder; with a zip ticked and a folder
+then entered, Open delivered one of them, never both. The owner ruled: several zips
+for now, folders as before, and no mixing. Folio does not enforce this. It imports
+whatever the picker delivers, one Import each, so if a picker on another platform
+hands over several folders, or folders with zips (the Mac's was not tried), each
+still becomes its own Import. Refusing them would need a new Notice and new words on
+screen for a case the owner did not ask to block.
+
+**Picking one zip on iPhone now takes one more tap.** With several allowed, tapping
+a zip ticks it and Open confirms; before, tapping a zip imported it at once. This
+comes with the system picker and was reported to the owner with the test build's
+findings.
+
+**The order within one visit is whatever the picker delivers.** The Imports are
+created one after another in that order, so they queue and run in it. The test build
+delivered zips ticked A then B as B then A, a later check on the same simulator
+delivered Alpha, Bravo and Charlie in the order ticked (so the order varies), and
+the owner ruled that the order need not match the order ticked. Imports queue behind anything already Queued, as a
+single new Import always did.
+
+**A picked folder is still one Book made of its own Pages, and Folio does not look
+inside it for zips.** Importing the zips found inside a folder was not asked for and
+is a different idea: it would turn one Source into several Books, which an Import
+never does.
+
+**On the Mac, a drop holding anything that is not a folder or a zip is refused
+whole.** What the user experiences: three zips and a folder dropped give four
+Imports, in the drop's order; two zips and a PDF dropped spring back and nothing is
+imported. Importing the zips and silently ignoring the PDF would leave the reader
+unsure what happened, and a half-accepted drop is something the owner ruled out. An
+empty drop is refused too. iPhone and iPad still have no drop target.
+
+**Each failure keeps its own Notice, except that a Library that cannot save shows
+one Notice for all of them.** A Source that cannot be referenced (it was removed, or
+is not downloaded) gets its Notice naming it, and the Sources after it are still
+imported. Ten ticked with three unreachable gives seven Import cards and three
+Notices, each naming its Source, shown one after another as the reader closes each. A
+Source whose Import fails later, say a zip with no images, ends Failed with its own
+Notice when its turn comes, as it always did, and the rest carry on. The exception
+is a Library that cannot save an Import at all, say because the disk is full: every
+Source fails the same way, the Notice is "Couldn't Import" with a fixed message and
+no Source name, and the rule that a Notice repeating the one before it shows once
+means the reader sees one Notice and no Import cards. The owner accepted this: the
+problem is the Library, not any one Source. Rejected: naming the Source in that
+Notice (new words on screen, and ten identical dialogs) and stopping at the first
+save failure (a failure then stops the rest, which the owner ruled out). The same
+rule also means two Sources with the same name that fail the same way show one
+Notice; that is today's rule, accepted.
+
+**Nothing in FolioCore changed, and no words on screen changed.** The Library already
+queues one Import per Source handed to it and runs them one at a time, in creation
+order. The Import button, its Mac tooltip and File → Import… keep their copy. No
+earlier entry in this file said the Mac drop takes one Source, so none needed
+correcting; the code's own comments, which did, were updated.
+
+**Not yet verified.** Everything on the Mac (agents send no input to the owner's
+Mac, so the Mac's picker, File → Import…, dropping several, and a drop with a PDF
+among zips springing back are unchecked), a real device, the Import cards while
+Imports are Queued (the small test zips finished too fast to catch them), a failing
+zip among several and picking exactly one zip on an iPad, the picker's own Cancel
+button and confirming with nothing ticked, and the Library unable to save seen in the
+running app (a test forces it and checks the one Notice). The owner's
+check list is in the implementation log.
