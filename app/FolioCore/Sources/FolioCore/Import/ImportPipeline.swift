@@ -98,10 +98,13 @@ public struct ImportPipeline: Sendable {
             try fileSystem {
                 try rename(staging, to: booksDirectory.appending(path: folderName))
             }
+            // A new Book starts Vertical (the owner's ruling, 2026-11-11). A Book already in
+            // the Library keeps the Reading Mode stored on it, and one stored with none
+            // still reads Page by Page (`Book.init`, `BookModel.book`).
             return Book(
                 id: bookID, title: title, folderName: folderName, pages: pages,
                 coverFileName: CoverImage.fileName, importedAt: importedAt,
-                lastOpenedAt: nil, readingPosition: nil)
+                lastOpenedAt: nil, readingPosition: nil, readingMode: .vertical)
         } catch {
             // Ignored: staging is temporary storage nothing in the Library lists; launch
             // clean-up or the system removes what is left, and the user is told `error`.

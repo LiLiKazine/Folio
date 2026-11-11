@@ -508,6 +508,17 @@ Vertical at its Reading Position's Page. A Book that has never been switched
 reads Page by Page, and so does every Book already in the Library. The Library
 card does not show the Reading Mode.
 
+**A newly imported Book starts Vertical (2026-11-11).** The owner asked for
+Vertical as the Reading Mode every Book starts in. Books already in a Library
+have Page by Page saved on them, and nothing saved tells a Book whose reader
+picked Page by Page from one that never switched, so the owner ruled that only
+Books imported from now on start Vertical. What the user experiences: a Book
+imported with this version opens as one strip; every Book imported before it
+keeps reading the way it did until the reader switches it; the choice is still
+remembered per Book, and there is still no setting for it. Rejected: switching
+every existing Book to Vertical once, which would also have switched Books the
+reader had deliberately kept Page by Page.
+
 **In Vertical, the Page you are "on" is the Page at the top of the screen.**
 Exactly: the last Page whose top edge has reached the top of the screen, where a
 top exactly at the top counts; when the strip is scrolled to its very end, the

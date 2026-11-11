@@ -130,6 +130,19 @@ struct ImportPipelineTests {
         #expect(book.readingPosition == nil)
     }
 
+    @Test("a newly imported Book reads Vertical")
+    func newBookReadsVertical() async throws {
+        let fixture = try Fixture()
+        defer { fixture.directory.remove() }
+        let source = try fixture.folderSource(["a.png"])
+
+        let book = try await fixture.pipeline.run(
+            source: source, bookID: BookID(), title: "Vol.3", importedAt: .now
+        ) { _, _ in }
+
+        #expect(book.readingMode == .vertical)
+    }
+
     @Test("zip Source is expanded and imported like a folder")
     func zip() async throws {
         let fixture = try Fixture()

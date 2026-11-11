@@ -48,7 +48,8 @@ _Avoid_: progress, bookmark, last read
 **Reading Mode**:
 How a Book's Pages are laid out while reading. Page by Page shows one Page at
 a time, turned by swiping; Vertical stacks every Page into one strip scrolled
-top to bottom. A Book remembers its Reading Mode; a Book that has none reads
+top to bottom. A Book remembers its Reading Mode. A newly imported Book starts
+Vertical; a Book stored with none, from before Reading Modes existed, reads
 Page by Page.
 _Avoid_: layout, view mode, scroll mode, webtoon
 
