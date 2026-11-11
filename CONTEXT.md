@@ -53,6 +53,22 @@ Vertical; a Book stored with none, from before Reading Modes existed, reads
 Page by Page.
 _Avoid_: layout, view mode, scroll mode, webtoon
 
+**Library Order**:
+The order Books appear in the Library: a Sort and a Direction. The Library
+remembers it. It starts as Recent, Descending.
+_Avoid_: arrangement, ordering, sorting
+
+**Sort**:
+What Books are ordered by in the Library Order: Recent, Title, or Date
+Imported. Recent is the time a Book was last opened, or imported if it was
+never opened. Date Imported is the time of the Book's Import.
+_Avoid_: category, sort rule, date added, name
+
+**Direction**:
+Which way a Sort runs: Ascending or Descending. Descending puts the latest
+time, or the end of the alphabet, first.
+_Avoid_: order (on its own), reverse
+
 **Notice**:
 A message the Library shows the user about an action that could not be
 completed, naming what failed and, when the user can do something about it,
@@ -89,13 +105,17 @@ _Avoid_: dismissed
 A Book's Title has changed.
 
 **BookOpened**:
-A Book was opened by the reader; the basis for Library order.
+A Book was opened by the reader; the basis for the Recent Sort.
 
 **ReadingPositionChanged**:
 A Book's Reading Position moved to a Page because the reader turned to it.
 
 **ReadingModeChanged**:
 A Book's Reading Mode changed because the reader chose a different one.
+
+**LibraryOrderChanged**:
+The Library Order changed because the reader chose a different Sort or
+Direction.
 
 **BookRemoved**:
 A Book and all its Pages have left the Library.
