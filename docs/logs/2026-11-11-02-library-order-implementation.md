@@ -113,3 +113,121 @@ Fetched on 2026-11-11 from
 
 - Nothing a user sees has changed, so nothing was launched.
 - Title order under any language other than this Mac's.
+
+
+## Task 2: The Library Order in the Library's store (schema V3)
+
+Terms: the *store* is the file on the device where the Library keeps its Books
+and Imports; a *schema* is the list of kinds of record the store holds, and each
+numbered *schema version* is one such list; a *migration* is how a store written
+in an older schema version is brought up to the current one when the app opens it;
+a *lightweight* migration is one SwiftData works out by itself from the
+difference between the two versions, with no code of ours.
+
+### What Changed
+
+- `Persistence/LibraryOrderModel.swift` (new): the stored form of the Library
+  Order, two text fields holding the Sort's and the Direction's raw values. If
+  either text names no Sort or no Direction (a store from some future or damaged
+  state), it reads as Recent, Descending, the starting Library Order, so a bad
+  value never stops the Library opening.
+- `Persistence/SwiftDataLibraryOrderRepository.swift` (new): the stored
+  version of the `LibraryOrderRepository` port. Reading gives the first stored
+  row, or nothing when none was ever saved. Saving changes that row, or adds one
+  if there is none, and then writes the store. There is never more than one row.
+- `Persistence/FolioSchema.swift`: schema version 3.0.0 (`FolioSchemaV3`) is the
+  Book and Import records plus the Library Order record. The migration plan lists
+  it and gains a lightweight stage from version 2 to version 3. Version 2 still
+  names the live `BookModel` and `ImportModel`, because neither changed. The
+  comment on version 1 now names V3 as done and V4 as the next, and V2's comment
+  no longer calls itself the current shape.
+- `Persistence/LibraryStorage.swift`: both ways of opening the Library
+  (in memory, and from the store file) open version 3.
+- Not done, as the plan says: nothing uses the new repository yet. Task 3 wires
+  it into the Library and the app, so what a user sees is unchanged.
+
+### Tests
+
+In `SwiftDataRepositoriesTests.swift`, four new tests:
+
+- nothing saved reads as no Library Order;
+- the Library Order roundtrips, and a second save replaces the first (one row
+  remains, checked by fetching from a second context on the same container);
+- a stored Library Order that names no case reads as Recent, Descending (once
+  with a Sort that does not exist, once with a Direction that does not exist);
+- `v2StoreOpensWithNoLibraryOrder`: a store written in schema version 2 holding
+  one Book (Reading Mode Vertical, Reading Position 1) opens in version 3 with
+  that Book's id, Title, Pages, Reading Position and Reading Mode unchanged, and
+  reading the Library Order gives nothing.
+
+The compile failure came first (`SwiftDataLibraryOrderRepository` and
+`LibraryOrderModel` not found), as the plan expects.
+
+The existing `v1StoreOpensAsPageByPage` still passes, now through both stages
+(1 to 2, then 2 to 3).
+
+Do the stages matter? The version 1 test's own comment says it would pass with
+no stages; that was true when there was one stage and the store was already
+close to current. I checked this for version 3 by taking the 2-to-3 stage out and
+running the tests: both the version 1 test and the version 2 test failed (SwiftData
+reported `unknownDataStoreSchema`, and Core Data error 134504 appeared in the log),
+and both passed again with the stage back. So the new stage is what opens a
+version 2 store, and a version 1 store needs it too, as its second step.
+(Observed, not documented.)
+
+### Apple documentation relied on
+
+Fetched on 2026-11-11 from `developer.apple.com/tutorials/data/documentation/`
+(the JSON behind each page):
+
+- `swiftdata/versionedschema` (`VersionedSchema`): "An interface for describing a
+  specific version of a schema, including the models it contains." Its `models`
+  property: "The models to include in this version of the schema." Its
+  `versionIdentifier`: "The textual description of the migration's version or
+  purpose." That is why `FolioSchemaV3` lists all three models and has its own
+  version number.
+- `swiftdata/schemamigrationplan` (`SchemaMigrationPlan`): "An interface for
+  describing the evolution of a schema and how to migrate between specific
+  versions." The plan lists each schema version and the stages between them.
+- `swiftdata/migrationstage` (`MigrationStage`): "Describes a migration between
+  two versions of the same schema." Its case
+  `lightweight(fromVersion:toVersion:)` takes two `VersionedSchema` types and has
+  no further prose on the page.
+- `coredata/migrating-your-data-model-automatically` ("Migrating Your Data Model
+  Automatically"; SwiftData's stores are Core Data stores, but this is Core Data's
+  page, not SwiftData's): "Core Data can typically perform an automatic data
+  migration, referred to as lightweight migration. Lightweight migration infers
+  the migration from the differences between the source and the destination
+  managed object models." and "You can add, remove, and rename entities in the
+  hierarchy." Adding a record kind, which is all version 3 does, is therefore a
+  change a lightweight migration handles. The brief named a page called "Using
+  Lightweight Migration"; that address returned nothing, and this page is the
+  Core Data page on the same subject.
+
+### What the documentation does not say (observed)
+
+- The SwiftData pages above are one-sentence summaries. They do not say whether
+  the same model classes may appear in two schema versions, which is what
+  version 2 and version 3 do for `BookModel` and `ImportModel`. Observed: SwiftData
+  accepts it. The container opens, the migration runs, and the version 1 and
+  version 2 tests pass. So the fallback in the brief (freezing copies of the
+  version 2 models, as version 1's are frozen) was not needed and was not used.
+- The SwiftData pages also do not say that a lightweight stage from 2 to 3 is
+  enough when the only difference is a new model. What the Core Data page says is
+  quoted above; that it holds under SwiftData is observed from the two tests.
+
+### Gate
+
+- `./scripts/test.sh`: FolioCore 100 tests in 9 suites passed (warnings as
+  errors); the app's tests passed on the iOS simulator and on macOS, 128 tests in
+  13 suites on macOS, the four new ones included.
+- `./scripts/format.sh --check`: clean.
+- The app's test build prints existing warnings about calling main-actor
+  methods from non-main-actor test code in `LibraryWindowTests.swift` and
+  the reading tests; none is in code this task wrote.
+
+### Not checked
+
+- Opening a store written by a real earlier build of the app (only stores
+  written by the tests, with version 1 and version 2 of the schema, were opened).
+- Nothing a user sees has changed, so nothing was launched.

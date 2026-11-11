@@ -136,6 +136,79 @@ import Testing
         #expect(books.first?.readingMode == .pageByPage)
     }
 
+    @Test(
+        "a store written by the second schema opens in the current one, with its Book and no Library Order"
+    )
+    func v2StoreOpensWithNoLibraryOrder() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appending(path: "Library.store", directoryHint: .notDirectory)
+        let book = Book(
+            id: BookID(), title: "Second Schema Book", folderName: "folder",
+            pages: [Page(fileName: "0001.jpg"), Page(fileName: "0002.jpg")],
+            coverFileName: "cover.jpg", importedAt: Date(timeIntervalSince1970: 1_000),
+            lastOpenedAt: nil, readingPosition: 1, readingMode: .vertical)
+
+        do {
+            let schema = Schema(versionedSchema: FolioSchemaV2.self)
+            let v2 = try ModelContainer(
+                for: schema, configurations: [ModelConfiguration(schema: schema, url: storeURL)])
+            let context = ModelContext(v2)
+            context.insert(BookModel(book))
+            try context.save()
+        }
+
+        let container = try LibraryStorage.makeContainer(at: storeURL)
+        let books = try await SwiftDataBookRepository(modelContainer: container).allBooks()
+
+        #expect(books.count == 1)
+        #expect(books.first?.id == book.id)
+        #expect(books.first?.title == "Second Schema Book")
+        #expect(books.first?.pages.map(\.fileName) == ["0001.jpg", "0002.jpg"])
+        #expect(books.first?.readingPosition == 1)
+        #expect(books.first?.readingMode == .vertical)
+        #expect(
+            try await SwiftDataLibraryOrderRepository(modelContainer: container).libraryOrder()
+                == nil)
+    }
+
+    @Test("nothing saved reads as no Library Order") func noLibraryOrderSaved() async throws {
+        let repository = SwiftDataLibraryOrderRepository(
+            modelContainer: try LibraryStorage.makeContainer(inMemory: true))
+
+        #expect(try await repository.libraryOrder() == nil)
+    }
+
+    @Test("the Library Order roundtrips, and a second save replaces the first")
+    func libraryOrderRoundtrip() async throws {
+        let container = try LibraryStorage.makeContainer(inMemory: true)
+        let repository = SwiftDataLibraryOrderRepository(modelContainer: container)
+
+        try await repository.save(LibraryOrder(sort: .title, direction: .ascending))
+        #expect(
+            try await repository.libraryOrder()
+                == LibraryOrder(sort: .title, direction: .ascending))
+
+        try await repository.save(LibraryOrder(sort: .dateImported, direction: .descending))
+        #expect(
+            try await repository.libraryOrder()
+                == LibraryOrder(sort: .dateImported, direction: .descending))
+        #expect(try ModelContext(container).fetchCount(FetchDescriptor<LibraryOrderModel>()) == 1)
+    }
+
+    @Test("a stored Library Order that names no case reads as Recent, Descending")
+    func unknownLibraryOrderReadsAsInitial() {
+        let unknownSort = LibraryOrderModel(.initial)
+        unknownSort.sort = "pageCount"
+        #expect(unknownSort.libraryOrder == .initial)
+
+        let unknownDirection = LibraryOrderModel(LibraryOrder(sort: .title, direction: .ascending))
+        unknownDirection.direction = "sideways"
+        #expect(unknownDirection.libraryOrder == .initial)
+    }
+
     @Test("allBooks uses Library order") func order() async throws {
         let repository = SwiftDataBookRepository(
             modelContainer: try LibraryStorage.makeContainer(inMemory: true))

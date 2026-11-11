@@ -4,8 +4,9 @@ import SwiftData
 /// The first shipped shape of the Library store, frozen: never edit these models.
 /// They exist so the store can be opened and migrated to the current shape. When a
 /// model changes again, freeze copies of the then-current models inside a new enum
-/// like this one, add a `FolioSchemaV3` with the new shapes, and add a stage to
-/// `FolioMigrationPlan`.
+/// like this one, add a `FolioSchemaV4` with the new shapes, and add a stage to
+/// `FolioMigrationPlan`. V3 added `LibraryOrderModel` and changed no existing model, so V2
+/// still names the live `BookModel` and `ImportModel`.
 enum FolioSchemaV1: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(1, 0, 0) }
     static var models: [any PersistentModel.Type] { [BookModel.self, ImportModel.self] }
@@ -70,19 +71,31 @@ enum FolioSchemaV1: VersionedSchema {
     }
 }
 
-/// The current shape of the Library store: V1 plus `BookModel.readingMode`, an
-/// optional text field that is empty for every Book stored before it existed.
+/// V1 plus `BookModel.readingMode`, an optional text field that is empty for every Book
+/// stored before it existed.
 enum FolioSchemaV2: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(2, 0, 0) }
     static var models: [any PersistentModel.Type] { [BookModel.self, ImportModel.self] }
 }
 
+/// The current shape of the Library store: V2 plus `LibraryOrderModel`, the one row holding
+/// the Library Order. A store written before it existed has no such row.
+enum FolioSchemaV3: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(3, 0, 0) }
+    static var models: [any PersistentModel.Type] {
+        [BookModel.self, ImportModel.self, LibraryOrderModel.self]
+    }
+}
+
 /// Migrations between the Library store's schemas.
 enum FolioMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
-        [FolioSchemaV1.self, FolioSchemaV2.self]
+        [FolioSchemaV1.self, FolioSchemaV2.self, FolioSchemaV3.self]
     }
     static var stages: [MigrationStage] {
-        [.lightweight(fromVersion: FolioSchemaV1.self, toVersion: FolioSchemaV2.self)]
+        [
+            .lightweight(fromVersion: FolioSchemaV1.self, toVersion: FolioSchemaV2.self),
+            .lightweight(fromVersion: FolioSchemaV2.self, toVersion: FolioSchemaV3.self),
+        ]
     }
 }
