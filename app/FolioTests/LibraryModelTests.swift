@@ -104,6 +104,7 @@ import UniformTypeIdentifiers
     private func makeFixture(
         books: any BookRepository = InMemoryBookRepository(),
         imports: any ImportRepository = InMemoryImportRepository(),
+        libraryOrders: any LibraryOrderRepository = InMemoryLibraryOrderRepository(),
         sourceAccess: any SourceAccess = InMemorySourceAccess()
     ) throws -> Fixture {
         let root = FileManager.default.temporaryDirectory
@@ -112,7 +113,7 @@ import UniformTypeIdentifiers
         try FileManager.default.createDirectory(
             at: booksDirectory, withIntermediateDirectories: true)
         let library = Library(
-            books: books, imports: imports,
+            books: books, imports: imports, libraryOrders: libraryOrders,
             pipeline: ImportPipeline(booksDirectory: booksDirectory),
             sourceAccess: sourceAccess)
         return Fixture(
@@ -471,6 +472,101 @@ import UniformTypeIdentifiers
         #expect(try await bookRepository.book(id: book.id)?.readingMode == .pageByPage)
     }
 
+    /// A Book titled `title`, imported at `imported` seconds after the reference date.
+    private func makeBook(titled title: String, imported: TimeInterval) -> Book {
+        let id = BookID()
+        return Book(
+            id: id, title: title, folderName: id.rawValue.uuidString,
+            pages: [Page(fileName: "0001.png")], coverFileName: CoverImage.fileName,
+            importedAt: Date(timeIntervalSinceReferenceDate: imported), lastOpenedAt: nil,
+            readingPosition: nil)
+    }
+
+    private func titles(of items: [LibraryItem]) -> [String] { books(in: items).map(\.title) }
+
+    /// Adds a Book titled `title` to `repository` with a folder under the Books directory,
+    /// so launch cleanup does not remove it as a record without a folder.
+    private func addBook(
+        titled title: String, imported: TimeInterval,
+        to repository: any BookRepository, in fixture: Fixture
+    ) async throws {
+        let book = makeBook(titled: title, imported: imported)
+        try FileManager.default.createDirectory(
+            at: fixture.booksDirectory.appending(path: book.folderName),
+            withIntermediateDirectories: true)
+        try await repository.add(book)
+    }
+
+    @Test("choosing a Library Order reorders the items and updates libraryOrder")
+    func chooseLibraryOrder() async throws {
+        let bookRepository = InMemoryBookRepository()
+        let fixture = try makeFixture(books: bookRepository)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        try await addBook(titled: "B", imported: 2, to: bookRepository, in: fixture)
+        try await addBook(titled: "A", imported: 1, to: bookRepository, in: fixture)
+        let model = fixture.model
+        let task = try await startModel(model)
+        defer { task.cancel() }
+        #expect(titles(of: model.items) == ["B", "A"])
+
+        let order = LibraryOrder(sort: .title, direction: .ascending)
+        await model.chooseLibraryOrder(order)
+
+        try await waitUntil("the items follow the Library Order") {
+            titles(of: model.items) == ["A", "B"]
+        }
+        #expect(model.libraryOrder == order)
+        #expect(model.notices.isEmpty)
+    }
+
+    @Test("the model starts with the Library Order that was saved")
+    func startsWithSavedLibraryOrder() async throws {
+        let bookRepository = InMemoryBookRepository()
+        let libraryOrders = InMemoryLibraryOrderRepository()
+        let saved = LibraryOrder(sort: .dateImported, direction: .ascending)
+        try await libraryOrders.save(saved)
+        let fixture = try makeFixture(books: bookRepository, libraryOrders: libraryOrders)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        try await addBook(titled: "B", imported: 2, to: bookRepository, in: fixture)
+        try await addBook(titled: "A", imported: 1, to: bookRepository, in: fixture)
+        let model = fixture.model
+        #expect(model.libraryOrder == .initial)
+
+        let task = try await startModel(model)
+        defer { task.cancel() }
+
+        #expect(model.libraryOrder == saved)
+        #expect(titles(of: model.items) == ["A", "B"])
+    }
+
+    @Test("a Library Order that cannot be saved queues its Notice and changes nothing on screen")
+    func chooseLibraryOrderFailureChangesNothing() async throws {
+        let bookRepository = InMemoryBookRepository()
+        let libraryOrders = FailingLibraryOrderRepository()
+        let fixture = try makeFixture(books: bookRepository, libraryOrders: libraryOrders)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        try await addBook(titled: "B", imported: 2, to: bookRepository, in: fixture)
+        try await addBook(titled: "A", imported: 1, to: bookRepository, in: fixture)
+        let model = fixture.model
+        let task = try await startModel(model)
+        defer { task.cancel() }
+        let itemsBefore = model.items
+        await libraryOrders.fail([.saveLibraryOrder])
+
+        await model.chooseLibraryOrder(LibraryOrder(sort: .title, direction: .ascending))
+
+        #expect(
+            copy(of: model.notices) == [
+                [
+                    "Couldn't Choose Library Order",
+                    "Folio couldn't save the change. Try again; if it keeps happening, relaunch Folio.",
+                ]
+            ])
+        #expect(model.libraryOrder == .initial)
+        #expect(model.items == itemsBefore)
+        #expect(titles(of: model.items) == ["B", "A"])
+    }
+
     @Test("a burst of turns leaves the last position stored, with no Notice")
     func turnPageBurst() async throws {
         let bookRepository = InMemoryBookRepository()
@@ -617,8 +713,10 @@ import UniformTypeIdentifiers
 
     /// One user operation and the single repository write it depends on.
     struct WriteFailure: Sendable, CustomTestStringConvertible {
+        /// The repository the operation writes to.
+        enum Store: Sendable { case books, imports, libraryOrders }
         let operation: LibraryOperation
-        let failsImports: Bool
+        let store: Store
         let call: RepositoryCall
         /// The Notice title, spelled out rather than built from `operation`.
         let title: String
@@ -629,20 +727,23 @@ import UniformTypeIdentifiers
         "a failing repository write yields the operation's Couldn't Notice",
         arguments: [
             WriteFailure(
-                operation: .import, failsImports: true, call: .add, title: "Couldn't Import"),
+                operation: .import, store: .imports, call: .add, title: "Couldn't Import"),
             WriteFailure(
-                operation: .cancelImport, failsImports: true, call: .update,
+                operation: .cancelImport, store: .imports, call: .update,
                 title: "Couldn't Cancel Import"),
             WriteFailure(
-                operation: .retryImport, failsImports: true, call: .update,
+                operation: .retryImport, store: .imports, call: .update,
                 title: "Couldn't Retry Import"),
             WriteFailure(
-                operation: .removeImport, failsImports: true, call: .remove,
+                operation: .removeImport, store: .imports, call: .remove,
                 title: "Couldn't Remove Import"),
             WriteFailure(
-                operation: .rename, failsImports: false, call: .update, title: "Couldn't Rename"),
+                operation: .rename, store: .books, call: .update, title: "Couldn't Rename"),
             WriteFailure(
-                operation: .deleteBook, failsImports: false, call: .remove,
+                operation: .chooseLibraryOrder, store: .libraryOrders, call: .saveLibraryOrder,
+                title: "Couldn't Choose Library Order"),
+            WriteFailure(
+                operation: .deleteBook, store: .books, call: .remove,
                 title: "Couldn't Delete Book"),
         ])
     func writeFailureNotice(_ failure: WriteFailure) async throws {
@@ -662,17 +763,20 @@ import UniformTypeIdentifiers
         let failed = importRecord(.failed)
         let bookRepository = FailingBookRepository()
         let importRepository = FailingImportRepository()
+        let libraryOrderRepository = FailingLibraryOrderRepository()
         try await bookRepository.add(book)
         try await importRepository.add(queued)
         try await importRepository.add(failed)
         // The model is not started, so no Import scheduler runs the Queued Import.
-        let fixture = try makeFixture(books: bookRepository, imports: importRepository)
+        let fixture = try makeFixture(
+            books: bookRepository, imports: importRepository,
+            libraryOrders: libraryOrderRepository)
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         let model = fixture.model
-        if failure.failsImports {
-            await importRepository.fail([failure.call])
-        } else {
-            await bookRepository.fail([failure.call])
+        switch failure.store {
+        case .books: await bookRepository.fail([failure.call])
+        case .imports: await importRepository.fail([failure.call])
+        case .libraryOrders: await libraryOrderRepository.fail([failure.call])
         }
 
         switch failure.operation {
@@ -683,6 +787,8 @@ import UniformTypeIdentifiers
         case .retryImport: await model.retryImport(failed.id)
         case .removeImport: await model.removeImport(failed.id)
         case .rename: await model.rename(book.id, to: "Volume One")
+        case .chooseLibraryOrder:
+            await model.chooseLibraryOrder(LibraryOrder(sort: .title, direction: .ascending))
         case .deleteBook: await model.removeBook(book.id)
         case .open, .turnPage, .chooseReadingMode, .updateLibrary, .openLibrary:
             // Open, Turn Page and Choose Reading Mode are log-only (reading designs), so

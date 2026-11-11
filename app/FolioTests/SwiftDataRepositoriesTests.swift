@@ -209,7 +209,7 @@ import Testing
         #expect(unknownDirection.libraryOrder == .initial)
     }
 
-    @Test("allBooks uses Library order") func order() async throws {
+    @Test("allBooks returns every Book") func allBooks() async throws {
         let repository = SwiftDataBookRepository(
             modelContainer: try LibraryStorage.makeContainer(inMemory: true))
         let older = makeBook(importedAt: Date(timeIntervalSince1970: 1_000))
@@ -222,10 +222,9 @@ import Testing
         let tieB = makeBook(importedAt: Date(timeIntervalSince1970: 1_500))
         for book in [older, tieA, opened, newer, tieB] { try await repository.add(book) }
 
-        let ties = [tieA, tieB].sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString }
         #expect(
-            try await repository.allBooks().map(\.id)
-                == [opened, newer, ties[0], ties[1], older].map(\.id))
+            Set(try await repository.allBooks().map(\.id))
+                == Set([opened, newer, tieA, tieB, older].map(\.id)))
     }
 
     @Test("Import roundtrips status, reason and bookID") func importRoundtrip() async throws {

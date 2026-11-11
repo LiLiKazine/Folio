@@ -1,8 +1,9 @@
 # 2026-11-11-02: Library Order — implementation
 
-**Status:** In progress. Task 1 of 5 is done (the Library Order value, its
-ordering rule for Books, and the place it will be saved, in FolioCore). Nothing
-a user can see has changed yet. The owner's check list and the final summary are
+**Status:** In progress. Tasks 1 to 3 of 5 are done (the Library Order value
+and its ordering rule, where it is saved, and the Library keeping it and the
+Library screen's model following it). Nothing a user can see has changed yet:
+there is no menu to choose a Library Order. The owner's check list and the final summary are
 written by Task 5.
 
 ## Context
@@ -231,3 +232,82 @@ Fetched on 2026-11-11 from `developer.apple.com/tutorials/data/documentation/`
 - Opening a store written by a real earlier build of the app (only stores
   written by the tests, with version 1 and version 2 of the schema, were opened).
 - Nothing a user sees has changed, so nothing was launched.
+
+## Task 3: The Library owns the Library Order; the model follows it
+
+### What Changed
+
+- The Library now takes the place where the Library Order is saved as one more
+  piece of storage, and answers two new questions. `libraryOrder()` gives the
+  saved Library Order, or Recent, Descending when none was ever chosen.
+  `chooseLibraryOrder(_:)` saves a chosen one and announces
+  `LibraryOrderChanged` with it. Choosing the Library Order already in force
+  saves nothing and announces nothing. A save that fails throws the Choose
+  Library Order failure; a read that fails throws the Update the Library failure,
+  the same one the grid already uses.
+- The Library's list of items now reads the Library Order each time and puts
+  the Books in it. Imports that have not produced a Book still come first, as
+  before. Opening a Book still changes only the time the Recent Sort uses; under
+  the Title Sort the Books stay in alphabetical order.
+- Storage no longer orders Books. The Book storage (the in-memory stand-in and
+  the SwiftData one) now returns every Book in no promised order, and the old
+  ordering rule for Books was deleted, so the Library is the only place that
+  decides the order. The SwiftData storage also lost its sort by identifier, whose
+  only job was to make ties in that old rule come out the same each time; the new
+  rule settles its own ties (Task 1).
+- The Library screen's model keeps `libraryOrder` (Recent, Descending until the
+  Library has been read), reads it together with the items at launch and on every
+  reload (one failure shows the one Update the Library Notice, as before), and
+  has `chooseLibraryOrder`. When the Library announces `LibraryOrderChanged`, the
+  model sets `libraryOrder` and reloads, so the grid reorders. A save that fails
+  shows the Notice "Couldn't Choose Library Order" with the usual "couldn't save
+  the change. Try again..." message and changes nothing on screen: the Library
+  Order and the items stay as they were, and no event is announced.
+- Opening a Book still does not reload the grid. The two comments in the model
+  that said "Library order" now say the Recent Sort.
+- The app builds the Library with the SwiftData Library Order storage from Task 2.
+
+### Tests
+
+- Library tests: with nothing saved the Library Order is Recent, Descending;
+  choosing saves it and announces it; choosing the one in force announces and
+  saves nothing (shown with storage that fails every save, once with nothing
+  saved and once with the same Library Order already saved); a failed save throws
+  and announces nothing and the Library Order stays Recent, Descending; items
+  follow Title Ascending and Date Imported Descending; a Library Order that cannot
+  be read fails the list of items; opening a Book moves it under Recent and leaves
+  Title alone. The error table has the Choose Library Order row.
+- Model tests: choosing a Library Order reorders the items and updates
+  `libraryOrder` without a Notice; the model starts with the saved one; the
+  failure table asserts "Couldn't Choose Library Order" with its message; a
+  separate test forces the failed save through the model and asserts the Notice,
+  `libraryOrder == .initial` and the items unchanged.
+- The two repository tests that asserted Library order now assert the set of
+  Books returned.
+
+### Observed
+
+- Launch cleanup removes a Book whose folder is missing from the Books folder, so
+  the first model tests (which only put Books in storage) saw an empty Library.
+  The model tests now create a folder for each Book. This is existing behaviour
+  of the launch step, not something this task changed.
+- The plan said `NoticeTests.swift` has a `Library(` call to update; it has none
+  (it only builds Notices), and its existing test of every operation's title
+  already covers Choose Library Order through `allCases`. No change there.
+- No new user-visible text was added: the Notice title is built from the
+  operation's name, so `Localizable.xcstrings` needed no sync.
+- No Apple framework behaviour is relied on by this task beyond what Task 2
+  already recorded, so there are no new quotes.
+
+### Gate
+
+- `./scripts/test.sh`: FolioCore 107 tests in 9 suites passed (warnings as
+  errors); the app's tests passed on the iOS simulator and on macOS (131 tests in
+  13 suites on macOS). `./scripts/format.sh --check`: clean.
+- The only build warnings are the existing "Traditional headermap style" project
+  warnings.
+
+### Not checked
+
+- Nothing a user sees has changed (no menu yet), so nothing was launched and no
+  hand check on the Mac or the simulator was done.

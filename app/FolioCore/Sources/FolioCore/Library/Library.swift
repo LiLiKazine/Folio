@@ -8,6 +8,7 @@ public actor Library {
     private let continuation: AsyncStream<LibraryEvent>.Continuation
     private let books: any BookRepository
     private let imports: any ImportRepository
+    private let libraryOrders: any LibraryOrderRepository
     private let pipeline: ImportPipeline
     private let sourceAccess: any SourceAccess
     private let now: @Sendable () -> Date
@@ -32,6 +33,7 @@ public actor Library {
 
     public init(
         books: any BookRepository, imports: any ImportRepository,
+        libraryOrders: any LibraryOrderRepository,
         pipeline: ImportPipeline, sourceAccess: any SourceAccess,
         now: @escaping @Sendable () -> Date = { .now }
     ) {
@@ -39,6 +41,7 @@ public actor Library {
             of: LibraryEvent.self, bufferingPolicy: .unbounded)
         self.books = books
         self.imports = imports
+        self.libraryOrders = libraryOrders
         self.pipeline = pipeline
         self.sourceAccess = sourceAccess
         self.now = now
@@ -76,14 +79,34 @@ public actor Library {
         }
     }
 
-    /// The Books and unfinished Imports in Library order. Throws only `LibraryError`.
+    /// The Books and unfinished Imports, the Books in the Library Order. Throws only
+    /// `LibraryError`.
     public func items() async throws(LibraryError) -> [LibraryItem] {
         try await storageGuard(.updateLibrary) {
+            let order = try await savedLibraryOrder()
             var items = try await books.allBooks().map(LibraryItem.book)
             for status in [ImportStatus.inProgress, .queued, .failed] {
                 items += try await imports.imports(status: status).map(LibraryItem.importRecord)
             }
-            return items.inLibraryOrder(LibraryOrder.initial)
+            return items.inLibraryOrder(order)
+        }
+    }
+
+    /// The Library Order in force: the one the reader last chose, or Recent, Descending
+    /// when none was ever chosen. Throws only `LibraryError`, naming `.updateLibrary`.
+    public func libraryOrder() async throws(LibraryError) -> LibraryOrder {
+        try await storageGuard(.updateLibrary) {
+            try await savedLibraryOrder()
+        }
+    }
+
+    /// Saves the Library Order. Throws only `LibraryError`, naming `.chooseLibraryOrder`.
+    /// Choosing the Library Order already in force changes nothing and announces nothing.
+    public func chooseLibraryOrder(_ order: LibraryOrder) async throws(LibraryError) {
+        try await storageGuard(.chooseLibraryOrder) {
+            guard try await savedLibraryOrder() != order else { return }
+            try await libraryOrders.save(order)
+            continuation.yield(.libraryOrderChanged(order))
         }
     }
 
@@ -277,6 +300,10 @@ public actor Library {
             throw LibraryError.notFound(operation)
         }
         return record
+    }
+
+    private func savedLibraryOrder() async throws -> LibraryOrder {
+        try await libraryOrders.libraryOrder() ?? .initial
     }
 
     private func book(id: BookID, for operation: LibraryOperation) async throws -> Book {

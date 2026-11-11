@@ -86,21 +86,24 @@ struct LibraryTests {
         let temporaryDirectory: URL
         let books: any BookRepository
         let imports: any ImportRepository
+        let libraryOrders: any LibraryOrderRepository
         let library: Library
 
         init(
             sourceAccess: any SourceAccess = InMemorySourceAccess(),
             books: any BookRepository = InMemoryBookRepository(),
             imports: any ImportRepository = InMemoryImportRepository(),
+            libraryOrders: any LibraryOrderRepository = InMemoryLibraryOrderRepository(),
             now: @escaping @Sendable () -> Date = { .now }
         ) throws {
             self.books = books
             self.imports = imports
+            self.libraryOrders = libraryOrders
             directory = try TemporaryDirectory()
             booksDirectory = directory.url.appending(path: "Books", directoryHint: .isDirectory)
             temporaryDirectory = directory.url.appending(path: "Temp", directoryHint: .isDirectory)
             library = Library(
-                books: books, imports: imports,
+                books: books, imports: imports, libraryOrders: libraryOrders,
                 pipeline: ImportPipeline(
                     booksDirectory: booksDirectory,
                     storage: FixedStorageCapacity(bytes: .max),
@@ -544,6 +547,132 @@ struct LibraryTests {
 
         #expect(events.isEmpty)
         #expect(try await books.book(id: book.id)?.readingMode == .pageByPage)
+    }
+
+    @Test("with nothing saved the Library Order is Recent, Descending")
+    func libraryOrderStartsInitial() async throws {
+        let fixture = try Fixture()
+        defer { fixture.directory.remove() }
+
+        #expect(try await fixture.library.libraryOrder() == .initial)
+    }
+
+    @Test("chooseLibraryOrder saves the Library Order and emits libraryOrderChanged")
+    func chooseLibraryOrder() async throws {
+        let libraryOrders = InMemoryLibraryOrderRepository()
+        let fixture = try Fixture(libraryOrders: libraryOrders)
+        defer { fixture.directory.remove() }
+        let order = LibraryOrder(sort: .title, direction: .ascending)
+
+        try await fixture.library.chooseLibraryOrder(order)
+        let events = await fixture.events(for: .milliseconds(300))
+
+        #expect(events == [.libraryOrderChanged(order)])
+        #expect(try await libraryOrders.libraryOrder() == order)
+        #expect(try await fixture.library.libraryOrder() == order)
+    }
+
+    @Test("chooseLibraryOrder with the Library Order in force announces nothing and saves nothing")
+    func chooseLibraryOrderUnchanged() async throws {
+        // The repositories keep no record of their calls, so a save is detected by making
+        // every save throw: choosing the Library Order in force must not reach it.
+        let initialBase = InMemoryLibraryOrderRepository()
+        let initialOrders = FailingLibraryOrderRepository(base: initialBase)
+        await initialOrders.fail([.saveLibraryOrder])
+        let initialFixture = try Fixture(libraryOrders: initialOrders)
+        defer { initialFixture.directory.remove() }
+
+        try await initialFixture.library.chooseLibraryOrder(.initial)
+        #expect(await initialFixture.events(for: .milliseconds(300)).isEmpty)
+
+        let saved = LibraryOrder(sort: .title, direction: .ascending)
+        let savedBase = InMemoryLibraryOrderRepository()
+        try await savedBase.save(saved)
+        let savedOrders = FailingLibraryOrderRepository(base: savedBase)
+        await savedOrders.fail([.saveLibraryOrder])
+        let savedFixture = try Fixture(libraryOrders: savedOrders)
+        defer { savedFixture.directory.remove() }
+
+        try await savedFixture.library.chooseLibraryOrder(saved)
+        #expect(await savedFixture.events(for: .milliseconds(300)).isEmpty)
+    }
+
+    @Test(
+        "chooseLibraryOrder that cannot save throws storage(.chooseLibraryOrder) and announces nothing"
+    )
+    func chooseLibraryOrderSaveFails() async throws {
+        let libraryOrders = FailingLibraryOrderRepository()
+        await libraryOrders.fail([.saveLibraryOrder])
+        let fixture = try Fixture(libraryOrders: libraryOrders)
+        defer { fixture.directory.remove() }
+
+        await #expect(throws: LibraryError.storage(.chooseLibraryOrder)) {
+            try await fixture.library.chooseLibraryOrder(
+                LibraryOrder(sort: .title, direction: .ascending))
+        }
+        let events = await fixture.events(for: .milliseconds(300))
+
+        #expect(events.isEmpty)
+        #expect(try await fixture.library.libraryOrder() == .initial)
+    }
+
+    @Test("items follow the chosen Library Order")
+    func itemsFollowLibraryOrder() async throws {
+        let fixture = try Fixture()
+        defer { fixture.directory.remove() }
+        for (title, imported) in [("B", 1.0), ("A", 2.0), ("C", 3.0)] {
+            var book = Self.book(importedAt: Date(timeIntervalSince1970: imported))
+            book.title = title
+            try await fixture.books.add(book)
+        }
+
+        try await fixture.library.chooseLibraryOrder(
+            LibraryOrder(sort: .title, direction: .ascending))
+        #expect(try await Self.bookTitles(in: fixture.library.items()) == ["A", "B", "C"])
+
+        try await fixture.library.chooseLibraryOrder(
+            LibraryOrder(sort: .dateImported, direction: .descending))
+        #expect(try await Self.bookTitles(in: fixture.library.items()) == ["C", "A", "B"])
+    }
+
+    @Test("items with a Library Order that cannot be read throws storage(.updateLibrary)")
+    func itemsLibraryOrderReadFails() async throws {
+        let libraryOrders = FailingLibraryOrderRepository()
+        await libraryOrders.fail([.libraryOrder])
+        let fixture = try Fixture(libraryOrders: libraryOrders)
+        defer { fixture.directory.remove() }
+
+        await #expect(throws: LibraryError.storage(.updateLibrary)) {
+            _ = try await fixture.library.items()
+        }
+    }
+
+    @Test("opening a Book moves it under Recent and not under Title")
+    func openingMovesBookUnderRecentOnly() async throws {
+        let openedAt = Date(timeIntervalSince1970: 1_000)
+        let fixture = try Fixture(now: { openedAt })
+        defer { fixture.directory.remove() }
+        var older = Self.book(importedAt: Date(timeIntervalSince1970: 1))
+        older.title = "B"
+        var newer = Self.book(importedAt: Date(timeIntervalSince1970: 2))
+        newer.title = "A"
+        try await fixture.books.add(older)
+        try await fixture.books.add(newer)
+
+        try await fixture.library.open(bookID: older.id)
+        #expect(try await Self.bookTitles(in: fixture.library.items()) == ["B", "A"])
+
+        try await fixture.library.chooseLibraryOrder(
+            LibraryOrder(sort: .title, direction: .ascending))
+        #expect(try await Self.bookTitles(in: fixture.library.items()) == ["A", "B"])
+        try await fixture.library.open(bookID: older.id)
+        #expect(try await Self.bookTitles(in: fixture.library.items()) == ["A", "B"])
+    }
+
+    private static func bookTitles(in items: [LibraryItem]) -> [String] {
+        items.compactMap {
+            if case .book(let book) = $0 { book.title } else { nil }
+        }
     }
 
     @Test("chooseReadingMode on an unknown Book throws notFound(.chooseReadingMode)")

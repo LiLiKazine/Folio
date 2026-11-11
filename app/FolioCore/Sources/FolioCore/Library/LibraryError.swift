@@ -9,6 +9,7 @@ public enum LibraryOperation: String, Sendable, Equatable, CaseIterable {
     case open = "Open"
     case turnPage = "Turn Page"
     case chooseReadingMode = "Choose Reading Mode"
+    case chooseLibraryOrder = "Choose Library Order"
     case deleteBook = "Delete Book"
     case updateLibrary = "Update the Library"
     case openLibrary = "Open the Library"

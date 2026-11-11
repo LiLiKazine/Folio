@@ -1,5 +1,5 @@
 public protocol BookRepository: Sendable {
-    /// All Books in Library order.
+    /// Every Book, in no promised order.
     func allBooks() async throws -> [Book]
     func book(id: BookID) async throws -> Book?
     func add(_ book: Book) async throws

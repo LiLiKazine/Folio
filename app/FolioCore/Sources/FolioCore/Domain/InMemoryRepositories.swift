@@ -4,7 +4,7 @@ public actor InMemoryBookRepository: BookRepository {
     public init() {}
 
     public func allBooks() async throws -> [Book] {
-        Array(books.values).inLibraryOrder()
+        Array(books.values)
     }
 
     public func book(id: BookID) async throws -> Book? { books[id] }
