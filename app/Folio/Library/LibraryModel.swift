@@ -11,6 +11,8 @@ import Observation
 /// failed record of an open (`open`, unless the Book is gone).
 @Observable @MainActor final class LibraryModel {
     private(set) var items: [LibraryItem] = []
+    /// The Library Order the items follow; Recent, Descending until the Library has been read.
+    private(set) var libraryOrder: LibraryOrder = .initial
     /// Pages done and total for Imports In Progress, updated without a reload.
     private(set) var liveProgress: [ImportID: (done: Int, total: Int)] = [:]
     /// Failures not yet dismissed, oldest first.
@@ -63,6 +65,7 @@ import Observation
     /// the Update the Library Notice that says what they see may be out of date.
     private func loadItems() async {
         do {
+            libraryOrder = try await library.libraryOrder()
             items = try await library.items()
         } catch {
             AppLog.library.error(
@@ -72,9 +75,11 @@ import Observation
     }
 
     /// Loads what it can after a failure that has already queued its Notice, without
-    /// a second one. `context` names that failure in the log.
+    /// a second one: the Library Order and the items, as `loadItems()` does, so the Sort
+    /// menu's ticks and the grid agree. `context` names that failure in the log.
     private func reloadAfterNotice(_ context: String) async {
         do {
+            libraryOrder = try await library.libraryOrder()
             items = try await library.items()
         } catch {
             // Log-only: the Notice just queued already tells the user; a successful
@@ -138,8 +143,8 @@ import Observation
         }
     }
 
-    /// Records the open but does not reload: the Library order refreshes the next
-    /// time the screen appears, so the Book does not jump while the user taps it.
+    /// Records the open but does not reload: under the Recent Sort the Book moves the next
+    /// time the screen appears, so it does not jump while the user taps it.
     ///
     /// Returns the Book to show: the Library's current copy, so a Reading Position moved
     /// since `book` was read (by another window) is not lost. When the open could not be
@@ -155,7 +160,7 @@ import Observation
             return nil
         } catch {
             // Log-only by the owner's ruling (reading design, "Opening"): the Pages are
-            // there and readable; a failed record changes only Library order.
+            // there and readable; a failed record changes only the Recent Sort.
             AppLog.library.error(
                 "Could not record an open: \(String(describing: error), privacy: .public)")
             return book
@@ -193,6 +198,14 @@ import Observation
             // Log-only by the owner's ruling (Reading Mode design, "A failed Reading Mode save is log-only"): the switch itself visibly succeeded.
             AppLog.library.error(
                 "Could not save the Reading Mode: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// Chooses the Library Order. A failed save queues a Notice and leaves `libraryOrder`
+    /// and `items` as they were; the change shows through `libraryOrderChanged`.
+    func chooseLibraryOrder(_ order: LibraryOrder) async {
+        await perform(.chooseLibraryOrder) { () async throws(LibraryError) in
+            try await self.library.chooseLibraryOrder(order)
         }
     }
 
@@ -263,6 +276,9 @@ import Observation
                 queue(Notice(importFailed: sourceName, reason: reason))
                 await reloadAfterNotice("an Import failed")
             }
+        case .libraryOrderChanged(let order):
+            libraryOrder = order
+            await reload()
         case .bookOpened, .readingPositionChanged, .readingModeChanged:
             break
         case .libraryStorageFailed(let operation):

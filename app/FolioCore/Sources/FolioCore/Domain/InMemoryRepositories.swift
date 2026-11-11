@@ -4,7 +4,7 @@ public actor InMemoryBookRepository: BookRepository {
     public init() {}
 
     public func allBooks() async throws -> [Book] {
-        Array(books.values).inLibraryOrder()
+        Array(books.values)
     }
 
     public func book(id: BookID) async throws -> Book? { books[id] }
@@ -32,4 +32,14 @@ public actor InMemoryImportRepository: ImportRepository {
     public func update(_ record: Import) async throws { records[record.id] = record }
 
     public func remove(id: ImportID) async throws { records[id] = nil }
+}
+
+public actor InMemoryLibraryOrderRepository: LibraryOrderRepository {
+    private var order: LibraryOrder?
+
+    public init() {}
+
+    public func libraryOrder() async throws -> LibraryOrder? { order }
+
+    public func save(_ order: LibraryOrder) async throws { self.order = order }
 }

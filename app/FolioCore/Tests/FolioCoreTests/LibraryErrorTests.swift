@@ -9,12 +9,13 @@ struct LibraryErrorTests {
         let directory: TemporaryDirectory
         let books = FailingBookRepository()
         let imports = FailingImportRepository()
+        let libraryOrders = FailingLibraryOrderRepository()
         let library: Library
 
         init(sourceAccess: InMemorySourceAccess = InMemorySourceAccess()) throws {
             directory = try TemporaryDirectory()
             library = Library(
-                books: books, imports: imports,
+                books: books, imports: imports, libraryOrders: libraryOrders,
                 pipeline: ImportPipeline(
                     booksDirectory: directory.url.appending(
                         path: "Books", directoryHint: .isDirectory),
@@ -63,6 +64,9 @@ struct LibraryErrorTests {
             case .turnPage: try await library.turnPage(bookID: book.id, to: 0)
             case .chooseReadingMode:
                 try await library.chooseReadingMode(bookID: book.id, .vertical)
+            case .chooseLibraryOrder:
+                try await library.chooseLibraryOrder(
+                    LibraryOrder(sort: .title, direction: .ascending))
             case .deleteBook: try await library.removeBook(id: book.id)
             case .updateLibrary, .openLibrary:
                 Issue.record("No operation set up for \(operation.rawValue)")
@@ -71,7 +75,7 @@ struct LibraryErrorTests {
     }
 
     /// Which repository a storage case fails.
-    enum Store: Sendable { case books, imports }
+    enum Store: Sendable { case books, imports, libraryOrders }
 
     /// One operation and the single repository write it depends on.
     struct StorageCase: Sendable, CustomTestStringConvertible {
@@ -141,6 +145,8 @@ struct LibraryErrorTests {
             StorageCase(operation: .open, store: .books, call: .update),
             StorageCase(operation: .turnPage, store: .books, call: .update),
             StorageCase(operation: .chooseReadingMode, store: .books, call: .update),
+            StorageCase(
+                operation: .chooseLibraryOrder, store: .libraryOrders, call: .saveLibraryOrder),
             StorageCase(operation: .deleteBook, store: .books, call: .remove),
         ])
     func storage(_ storageCase: StorageCase) async throws {
@@ -152,6 +158,7 @@ struct LibraryErrorTests {
         switch storageCase.store {
         case .books: await fixture.books.fail([storageCase.call])
         case .imports: await fixture.imports.fail([storageCase.call])
+        case .libraryOrders: await fixture.libraryOrders.fail([storageCase.call])
         }
 
         await #expect(throws: LibraryError.storage(storageCase.operation)) {

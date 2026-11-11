@@ -6,12 +6,7 @@ import SwiftData
 @ModelActor
 actor SwiftDataBookRepository: BookRepository {
     func allBooks() async throws -> [Book] {
-        // Sort by id first so the stable Library-order sort breaks timestamp
-        // ties deterministically.
-        try modelContext.fetch(FetchDescriptor<BookModel>())
-            .map(\.book)
-            .sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString }
-            .inLibraryOrder()
+        try modelContext.fetch(FetchDescriptor<BookModel>()).map(\.book)
     }
 
     func book(id: BookID) async throws -> Book? {

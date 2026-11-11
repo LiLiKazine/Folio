@@ -65,10 +65,3 @@ public struct Book: Hashable, Codable, Sendable, Identifiable {
             try values.decodeIfPresent(ReadingMode.self, forKey: .readingMode) ?? .pageByPage
     }
 }
-
-extension Array where Element == Book {
-    /// Library order: last opened or imported, newest first.
-    public func inLibraryOrder() -> [Book] {
-        sorted { ($0.lastOpenedAt ?? $0.importedAt) > ($1.lastOpenedAt ?? $1.importedAt) }
-    }
-}

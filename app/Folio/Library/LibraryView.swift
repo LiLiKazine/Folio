@@ -46,6 +46,7 @@ struct LibraryView: View {
                         Button("Import", systemImage: "plus") { request(.importPicker) }
                     #endif
                 }
+                ToolbarItem(placement: .automatic) { sortMenu }
                 #if os(iOS)
                     if horizontalSizeClass == .regular {
                         ToolbarItem(placement: .topBarTrailing) {
@@ -118,6 +119,24 @@ struct LibraryView: View {
         }
     }
 
+    /// Chooses the Library Order. The ticks move once the Library has saved the choice;
+    /// a failed save shows a Notice and leaves the grid and the ticks as they were.
+    private var sortMenu: some View {
+        Menu("Sort", systemImage: "arrow.up.arrow.down") {
+            LibraryOrderPickers(order: model.libraryOrder) { order in
+                Task { await model.chooseLibraryOrder(order) }
+            }
+        }
+        #if os(macOS)
+            .help("Sort")
+        #endif
+        .disabled(!hasBooks)
+    }
+
+    private var hasBooks: Bool {
+        model.items.contains { if case .book = $0 { true } else { false } }
+    }
+
     #if os(macOS)
         /// Presents the delete confirmation for the selected Book; nil with no
         /// selection, which leaves the Delete key and Edit → Delete disabled.
@@ -134,10 +153,6 @@ struct LibraryView: View {
             return nil
         }
     #else
-        private var hasBooks: Bool {
-            model.items.contains { if case .book = $0 { true } else { false } }
-        }
-
         /// Leaves Select mode; the selection does not outlive it.
         private func endSelecting() {
             isSelecting = false

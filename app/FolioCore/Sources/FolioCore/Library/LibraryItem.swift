@@ -14,8 +14,9 @@ public enum LibraryItem: Identifiable, Hashable, Sendable {
 }
 
 extension Array where Element == LibraryItem {
-    /// In Progress first, then Queued by createdAt, then Failed by createdAt, then Books in Library order.
-    public func inLibraryOrder() -> [LibraryItem] {
+    /// In Progress first, then Queued by createdAt, then Failed by createdAt, then Books in the
+    /// Library Order.
+    public func inLibraryOrder(_ order: LibraryOrder) -> [LibraryItem] {
         var records: [Import] = []
         var books: [Book] = []
         for item in self {
@@ -29,6 +30,6 @@ extension Array where Element == LibraryItem {
                 .map(LibraryItem.importRecord)
         }
         return ordered(.inProgress) + ordered(.queued) + ordered(.failed)
-            + books.inLibraryOrder().map(LibraryItem.book)
+            + books.ordered(by: order).map(LibraryItem.book)
     }
 }

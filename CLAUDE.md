@@ -68,23 +68,26 @@ Xcode applies the flag to package targets directly.
 ## Library and Import code
 
 `FolioCore` is organised by concern. `Domain/` holds the values (Book, Import,
-Reading Position, Reading Mode), the Library events, the repository protocols,
-and in-memory repositories for tests. `Source/` scans a folder Source into
-ordered Pages, reads zips on Compression (`ZipArchive`, stored and deflate
-only), and defines the `SourceAccess` port. `Import/` is the atomic
+Reading Position, Reading Mode, and `LibraryOrder` with the rule that places
+Books in it), the Library events, the repository protocols (including
+`LibraryOrderRepository`), and in-memory repositories for tests. `Source/`
+scans a folder Source into ordered Pages, reads zips on Compression
+(`ZipArchive`, stored and deflate only), and defines the `SourceAccess` port. `Import/` is the atomic
 `ImportPipeline` (stage, copy Pages, render the Cover, move into place), Cover
 rendering, and the storage capacity check. `Library/` is the `Library` actor
 with its serial Import scheduler and launch recovery, the `LibraryItem` values
 the grid shows, and `LibraryLog`.
 
 The app target supplies the platform side. `Persistence/` holds the SwiftData
-models and repositories, `LibraryStorage` (the backup-excluded Books directory
-that also contains the store), and `FileSourceAccess` (security-scoped
-bookmarks). `Library/` holds `LibraryModel` (the only consumer of the Library's
-events) and the SwiftUI views, the Mac commands and drop target, and the iPad
-selection bar. `LibraryWindow` is the root of each window: it owns the
-navigation stack's path and every dialog and status line, so a Notice shows
-over whichever screen is on top. `Reading/` holds the open Book: `ReadingView`
+models and repositories (`LibraryOrderModel`, one record, and
+`SwiftDataLibraryOrderRepository`), `LibraryStorage` (the backup-excluded Books
+directory that also contains the store), and `FileSourceAccess`
+(security-scoped bookmarks). `Library/` holds `LibraryModel` (the only consumer of the Library's
+events) and the SwiftUI views, the Sort menu that chooses the Library Order
+(a toolbar menu, plus View → Sort By on the Mac), the Mac commands and drop
+target, and the iPad selection bar. `LibraryWindow` is the root of each window:
+it owns the navigation stack's path and every dialog and status line, so a
+Notice shows over whichever screen is on top. `Reading/` holds the open Book: `ReadingView`
 (hosts both Reading Modes, the Reading Mode control, the keys and the Reading
 Position), `PageView` (zoom and the placeholder), `ReadingChrome` (counter and
 slider), and `PageImage` / `PageImageCache` (pixel sizes read without decoding;

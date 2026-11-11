@@ -45,6 +45,7 @@ struct FolioApp: App {
             let library = Library(
                 books: SwiftDataBookRepository(modelContainer: container),
                 imports: SwiftDataImportRepository(modelContainer: container),
+                libraryOrders: SwiftDataLibraryOrderRepository(modelContainer: container),
                 pipeline: ImportPipeline(booksDirectory: booksDirectory),
                 sourceAccess: FileSourceAccess()
             )

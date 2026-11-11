@@ -13,6 +13,8 @@ public enum LibraryEvent: Sendable, Equatable {
     case readingPositionChanged(BookID, page: Int)
     /// A Book's Reading Mode changed because the reader chose another.
     case readingModeChanged(BookID, mode: ReadingMode)
+    /// The Library Order changed because the reader chose a different Sort or Direction.
+    case libraryOrderChanged(LibraryOrder)
     case bookRemoved(BookID)
     /// A change the Library could not save or apply on the user's behalf, with no
     /// caller to throw to; names what it was trying to do.

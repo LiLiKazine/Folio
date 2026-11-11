@@ -5,8 +5,8 @@ import Testing
 
 @Suite("In-memory repositories")
 struct InMemoryRepositoriesTests {
-    @Test("allBooks returns Library order: last opened or imported, newest first")
-    func libraryOrder() async throws {
+    @Test("allBooks returns every Book")
+    func allBooks() async throws {
         let repo = InMemoryBookRepository()
         let old = makeBook(importedAt: .init(timeIntervalSince1970: 100))
         let opened = makeBook(
@@ -14,7 +14,7 @@ struct InMemoryRepositoriesTests {
             lastOpenedAt: .init(timeIntervalSince1970: 500))
         let fresh = makeBook(importedAt: .init(timeIntervalSince1970: 300))
         for book in [old, opened, fresh] { try await repo.add(book) }
-        #expect(try await repo.allBooks().map(\.id) == [opened.id, fresh.id, old.id])
+        #expect(Set(try await repo.allBooks().map(\.id)) == [opened.id, fresh.id, old.id])
     }
 
     @Test("update replaces a Book by id")

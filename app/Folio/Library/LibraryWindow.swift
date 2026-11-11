@@ -43,6 +43,12 @@ struct LibraryWindow: View {
         }
         #if os(macOS)
             .focusedSceneValue(\.libraryImporterIsPresented, importerIsPresented)
+            .focusedSceneValue(
+                \.libraryOrderChoice,
+                LibraryOrderChoice(order: model.libraryOrder) { order in
+                    Task { await model.chooseLibraryOrder(order) }
+                }
+            )
             .libraryDropTarget(onImport: importSource)
         #endif
         .background { dialogHost }
