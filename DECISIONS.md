@@ -897,8 +897,9 @@ findings.
 
 **The order within one visit is whatever the picker delivers.** The Imports are
 created one after another in that order, so they queue and run in it. The test build
-delivered zips ticked A then B as B then A, and the owner ruled that the order need
-not match the order ticked. Imports queue behind anything already Queued, as a
+delivered zips ticked A then B as B then A, a later check on the same simulator
+delivered Alpha, Bravo and Charlie in the order ticked (so the order varies), and
+the owner ruled that the order need not match the order ticked. Imports queue behind anything already Queued, as a
 single new Import always did.
 
 **A picked folder is still one Book made of its own Pages, and Folio does not look
@@ -938,6 +939,9 @@ correcting; the code's own comments, which did, were updated.
 
 **Not yet verified.** Everything on the Mac (agents send no input to the owner's
 Mac, so the Mac's picker, File → Import…, dropping several, and a drop with a PDF
-among zips springing back are unchecked), a real device, and the Import cards while
-Imports are Queued (the small test zips finished too fast to catch them). The owner's
+among zips springing back are unchecked), a real device, the Import cards while
+Imports are Queued (the small test zips finished too fast to catch them), a failing
+zip among several and picking exactly one zip on an iPad, the picker's own Cancel
+button and confirming with nothing ticked, and the Library unable to save seen in the
+running app (a test forces it and checks the one Notice). The owner's
 check list is in the implementation log.

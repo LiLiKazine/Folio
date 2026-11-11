@@ -33,7 +33,17 @@ confirmation. A folder is picked as before: go into it and press Open.
 The owner keeps zips in the Files app on an iPhone and had to open the picker
 once per zip. The Library already queues Imports and runs them one at a time, so
 nothing changes in `FolioCore`; the model now creates an Import for each Source
-handed to it. Design: `docs/superpowers/specs/2026-11-11-import-several-sources-design.md`.
+handed to it.
+
+A test build of the system picker on the iPhone 17 Pro simulator (iOS 26.5) showed
+that tapping a zip ticks it, that two ticked zips are delivered together, that
+tapping a folder enters it instead of ticking it ("Select All" ticks the zips and
+no folder), that pressing Open inside a folder delivers that one folder, and that
+zips ticked A then B were delivered B then A. The owner ruled: several zips ticked
+for now, folders picked as before, no mixing, and the order within a visit does not
+matter. The owner also ruled that when the Library cannot save an Import, one
+"Couldn't Import" Notice with a fixed message is enough for every Source, and that
+a Mac drop holding anything that is neither a folder nor a zip is refused whole. Design: `docs/superpowers/specs/2026-11-11-import-several-sources-design.md`.
 Plan: `docs/superpowers/plans/2026-11-11-import-several-sources.md`.
 
 ## Options considered and rejected
@@ -63,11 +73,12 @@ on the Mac.
    iPhone: not checked.
 3. **One zip that fails among several.** Seen on the iPhone 17 Pro simulator (iOS 26.5):
    with two good zips and a zip holding no images ticked, the screen showed a Notice
-   "Couldn't Import “Empty.zip” / No images found", a Failed card named "Empty"
+   "Couldn't Import “Empty.zip” / No images found", a Failed card titled "Empty"
    with a Retry button, and the two good zips as new Books. Real iPhone: not
    checked.
 4. **Picking exactly one zip still works.** Seen on the iPhone 17 Pro simulator (iOS 26.5):
-   one Book; it takes a tap on the zip and then Open, one more tap than before.
+   one Book; it takes a tap on the zip and then Open, one more tap than before. Real
+   iPhone: not checked.
 5. **Cancelling the picker does nothing.** Seen on the iPhone 17 Pro simulator (iOS 26.5): swiping
    the picker away changed nothing and showed no Notice. The picker's own
    Cancel and confirming with nothing ticked: not checked.
@@ -131,8 +142,11 @@ it is wrong.
 - Folio's own rule that a repeated Notice shows once is what turns "ten Sources, the
   Library cannot save" into one Notice; the test pins it with three Sources.
 - A picked Source's permission to read it must be claimed and given back for each
-  Source, one at a time, and Apple's page says each URL carries its own; the loop
-  does exactly that and gives the permission back only when claiming it worked.
+  Source, one at a time. Apple's page speaks of "the URLs" together and does not say
+  outright that each carries its own permission; that each Source needs its own claim
+  and give-back is my reading of it together with the rule that every claim for a
+  given URL must be balanced. The loop does exactly that and gives the permission
+  back only when claiming it worked.
 - The picker remembers where it was last used, including inside a folder, so a second
   visit can start there; this made the simulator checks need an extra tap and is the
   system's behaviour, not Folio's.
@@ -195,7 +209,8 @@ Fetched from `developer.apple.com/tutorials/data/documentation/`:
 - Same page: "This dialog provides security-scoped URLs. Call the
   startAccessingSecurityScopedResource method to access or bookmark the URLs, and
   the stopAccessingSecurityScopedResource method to release the access." The
-  plural "URLs" is why the claim and release happen once for each Source.
+  plural "URLs" is why I claim and release once for each Source (my reading; the
+  page does not say it outright).
 - Same page: "If the user cancels the operation, isPresented will be set to false
   and onCompletion will not be called." So cancelling the picker gives no result at
   all, and nothing happens.
@@ -231,7 +246,7 @@ iPhone 17 Pro simulator, iOS 26.5:
   three small Imports finished before the next screen read.
 - Went into "Folder Book" and pressed Open: one Book, "Folder Book", three Pages.
 - Ticked Alpha, Bravo and Empty, pressed Open: a Notice "Couldn't Import “Empty.zip”
-  / No images found", a Failed card named "Empty" with a Retry button, and two new
+  / No images found", a Failed card titled "Empty" with a Retry button, and two new
   Books (Alpha and Bravo). Closing the Notice left the Library as described.
 - Opened the picker and dismissed it by swiping down: nothing happened, no Notice.
 - Ticked Charlie alone and pressed Open: one Book. One zip now takes a tap on the
@@ -240,10 +255,14 @@ iPhone 17 Pro simulator, iOS 26.5:
 iPad Pro 11-inch (M5) simulator, iOS 26.5:
 
 - Ticked Alpha, Bravo and Charlie (a folder in the same listing did not tick),
-  pressed Open: three Books arrived (Charlie, Bravo, Alpha, three Pages each).
+  pressed Open: three Books arrived (the grid showed Charlie, Bravo, Alpha, three
+  Pages each; that is the grid's order, not necessarily the order they arrived in).
 - Went into "Folder Book" and pressed Open: one Book.
 
-Nothing seen contradicts "What the spike found". Not seen: the Import cards while
+Nothing seen contradicts what "What the spike found" says can be ticked and
+delivered. The delivery order differed from the spike's (Alpha, Bravo, Charlie
+arrived in the order ticked here; the spike saw A then B arrive as B then A), which
+the design already says is not guaranteed. Not seen: the Import cards while
 Queued, a real device, the Mac.
 
 ### Gate
@@ -304,8 +323,9 @@ slash; a real file with no extension rejected; an empty drop rejected. Full runs
 
 - Whether the order of the dropped items matches the order they were arranged in
   Finder is not documented. Folio uses the order the system gives the closure.
-- That a refused drop visibly springs back is not stated on that page; it is how a
-  single unsupported item has always behaved here and is on the owner's list.
+- That a refused drop visibly springs back is not stated on that page. The design
+  and a comment in the code say it does; nobody has recorded seeing it, so it is on
+  the owner's list as not checked.
 
 ### Not checked
 
@@ -348,4 +368,5 @@ takes a screenshot; no input was sent to the Mac.
 | c58d5b0 (main) | docs(import): the design and plan for importing several Sources at once |
 | bedcf2c | feat(import): the file picker takes several Sources and each becomes its own Import |
 | aa4967d | feat(import): several folders and zips dropped on the Mac's Library window are each imported |
-| (this) | docs(import): record the decisions for importing several Sources and the owner's check list |
+| 77497de | docs(import): record the decisions for importing several Sources and the owner's check list |
+| (this) | docs(import): say only what Apple's page and the simulator checks support |
