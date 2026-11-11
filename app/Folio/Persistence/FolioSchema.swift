@@ -6,7 +6,9 @@ import SwiftData
 /// model changes again, freeze copies of the then-current models inside a new enum
 /// like this one, add a `FolioSchemaV4` with the new shapes, and add a stage to
 /// `FolioMigrationPlan`. V3 added `LibraryOrderModel` and changed no existing model, so V2
-/// still names the live `BookModel` and `ImportModel`.
+/// and V3 both still name the live `BookModel` and `ImportModel`. When either model changes,
+/// BOTH V2 and V3 must be given frozen copies: freezing only V3 would make
+/// `v2StoreOpensWithNoLibraryOrder` write its store in the new shape and prove nothing.
 enum FolioSchemaV1: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(1, 0, 0) }
     static var models: [any PersistentModel.Type] { [BookModel.self, ImportModel.self] }

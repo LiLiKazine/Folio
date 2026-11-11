@@ -26,7 +26,7 @@ public struct LibraryOrder: Equatable, Hashable, Sendable, Codable {
 
 extension Array where Element == Book {
     /// The Books in the Library Order. Ascending is a total order per Sort, with ties broken by
-    /// Date Imported and then by the Book's identifier; Descending is exactly Ascending reversed.
+    /// Date Imported and then by the Book's identifier; Descending is exactly Ascending read from the other end.
     public func ordered(by order: LibraryOrder) -> [Book] {
         let ascending = sorted { $0.isBefore($1, by: order.sort) }
         switch order.direction {

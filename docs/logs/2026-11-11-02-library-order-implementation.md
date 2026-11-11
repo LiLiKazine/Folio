@@ -33,10 +33,11 @@ Not verified:
 
 Seven rulings the owner should know about are written up near the end, in plain
 words; two need the owner's confirmation: ruling 5 (a hidden label) and ruling 6
-(the Sort menu is dimmed with no Books, against Apple's guidance). After them,
-outside the numbered list, is an incident the owner must read: while finishing
-this log, a command was run that erased git's undo records for the whole
-repository ("What went wrong while finishing this log").
+(the Sort menu is dimmed with no Books, against Apple's guidance). Ruling 7 is the
+disclosure of an incident the owner must read: while finishing this log, a command
+was run that erased git's undo records for the whole repository ("What went wrong
+while finishing this log"). After the rulings is also a note on a warning the
+build does not stop on.
 
 ## Context
 
@@ -462,8 +463,9 @@ Fetched on 2026-11-11 from `developer.apple.com/tutorials/data/documentation/`
 - `./scripts/test.sh`: FolioCore 107 tests in 9 suites passed (warnings as
   errors); the app's tests passed on the iOS simulator and on macOS (131 tests in
   13 suites on macOS). `./scripts/format.sh --check`: clean.
-- The only build warnings are the existing "Traditional headermap style" project
-  warnings.
+- Build warnings: the existing "Traditional headermap style" project warnings, and
+  the existing test warnings about calling main-actor code from code that does not
+  declare it (see Tasks 2 and 4, and the note after the rulings).
 
 ### Not checked
 
@@ -650,8 +652,10 @@ simulator only.
   code declares Import, then Sort, then Select).
 - **Empty Library.** On the iPad, before any Book was imported, Sort and Select
   were dimmed and Import was not.
-- **Scroll position.** Choosing a Direction while scrolled down left the grid
-  where it was, give or take about ten points; nothing scrolled to the top.
+- **Scroll position.** A choice made in the menu while scrolled down left the
+  grid where it was, give or take about ten points; nothing scrolled to the top.
+  (The Task 4 report says "choosing" and does not say whether it was a Sort or a
+  Direction.)
 - **A Library from before this slice.** The iPhone simulator's Library was
   written by an earlier build (its database had no Library Order table). It
   opened with every Book in Recent, Descending, and the database then held the new
@@ -776,6 +780,38 @@ apostrophe in "menu's" as a curly one). The quotes for `primaryAction`,
 menu-bar article and the Guidelines' View menu line were taken from the Task 4
 report and were not fetched again for this task or by the reviewer.
 
+## The final review's fixes
+
+After the whole branch was reviewed once more, one commit fixed what the review
+found. Nothing in it adds a feature.
+
+- **After a launch that could not read the Library, the Sort menu ticks the Library
+  Order the grid is in.** Before: if starting the Library failed once (for example
+  the stored Imports could not be read), the screen still loaded the Books in the
+  saved Library Order, but the menu kept ticking Recent, Descending, so a reader
+  could see a grid sorted by Title with ticks on Recent. Now the screen reads the
+  saved Library Order at the same moment it reads the Books, and still shows only
+  the one Notice for that failure ("Couldn't Open the Library"). A reader whose
+  Library could not be read at launch now sees ticks that match the grid. Test
+  first: a Library holding a saved Title, Ascending Library Order and a storage
+  that fails its first read of In Progress Imports and no other; the screen's
+  Library Order was Recent, Descending (failed), and is now Title, Ascending
+  (passes).
+- **Words.** A test's display name no longer uses "arrangement" (an Avoid word) or
+  "reversed" for a Direction; a code comment no longer says a Direction is
+  "reversed". Plain reversal of an array in code is unchanged.
+- **Comments.** The comment above `v1StoreOpensAsPageByPage` now says what was
+  observed on 2026-11-11: removing the stage from the second schema to the third
+  makes that test fail, so it exercises both stages. The header of
+  `FolioSchema.swift` now says that the second and third schemas both name the
+  live Book and Import models, so when either model changes both must be given
+  frozen copies; freezing only the third would make the test of an old store write
+  its store in the new shape and prove nothing.
+- **This log.** The incident entry now says how much of the undo trail is gone;
+  the scroll, warning and ruling wording that disagreed with itself or with the
+  controller's ledger is reconciled (the incident is now Ruling 7, as in the
+  ledger); the two items this commit fixed are no longer listed as open.
+
 ## Tests
 
 `./scripts/verify.sh`, run for this task on this Mac with the current branch
@@ -790,6 +826,15 @@ report and were not fetched again for this task or by the reviewer.
 - Both apps built and launched (the script launches them and takes a screenshot;
   nothing was typed or clicked on the Mac).
 - For this task's documents there is nothing to compile, so no test was added.
+
+### The final review's fixes
+
+- `./scripts/test.sh` (both platforms): `** TEST SUCCEEDED **` on iOS and on macOS;
+  macOS ran 134 tests in 14 suites (one more than before: the new model test).
+  FolioCore: 107 tests in 9 suites passed, with warnings as errors.
+  `./scripts/format.sh --check`: clean.
+- The new test failed before the fix (the screen's Library Order was Recent,
+  Descending, not the saved Title, Ascending) and passed after it.
 
 ## What was discovered
 
@@ -807,8 +852,8 @@ report and were not fetched again for this task or by the reviewer.
 - The iPhone simulator's Library had been written by an earlier build and opened
   correctly in Recent, Descending with all its Books, then gained the stored
   Library Order record; each simulator ended with exactly one such record.
-- Choosing a Sort while scrolled leaves the grid where it was, give or take about
-  ten points; nothing is scrolled by code.
+- A choice made in the menu while scrolled down leaves the grid where it was, give
+  or take about ten points; nothing is scrolled by code.
 
 ## Not checked
 
@@ -827,7 +872,8 @@ These are the calls the controller (the agent that coordinated the tasks) made.
 Its running list, the *ledger*, is kept outside the repository in
 `.superpowers/sdd/2026-11-11-library-order/`, a folder git does not track; this
 section restates every ruling in it, in plain words, each with what a user would
-experience if it is wrong. Two need the owner to confirm: rulings 5 and 6.
+experience if it is wrong. The numbers are the ledger's. Two need the owner to
+confirm: rulings 5 and 6.
 
 **Ruling 1: one implementation log.** One log for the whole slice (this file),
 with a section per task, finished in Task 5, instead of a log per commit. If
@@ -887,8 +933,16 @@ and shows nothing different until Books arrive. If wrong: remove the one line
 that dims the toolbar's Sort (`.disabled(!hasBooks)` in `LibraryView.swift`), and
 both places then stay openable. The owner should confirm.
 
-**Ruling 7 (reported while building Task 2): a warning the build does not stop on.**
-The tests for the app show warnings about calling code that must run on the main
+**Ruling 7: the git clean-up incident is told to the owner, not hidden, and not
+repaired.** While finishing this log, a command was run that erased git's undo
+records for the whole repository. The controller ruled that the owner is told in
+this log and in the final report, that no recovery is attempted (it is not
+possible), and that a note is kept for later sessions. It is written up under
+"What went wrong while finishing this log", below. If wrong: nothing in the
+app; only whether the owner learns of it from this log.
+
+**Not a ruling in the ledger: a warning the build does not stop on.** Reported by
+the builder of Task 2 and noted by the reviewers. The tests for the app show warnings about calling code that must run on the main
 thread from code that does not declare it, in `LibraryWindowTests.swift` and the
 Reading tests. They were there before this slice and are not in code it wrote.
 The project says "warnings are errors", but these do not fail the build, so the
@@ -900,13 +954,8 @@ the rule made true or the exception recorded.
 
 None is a defect against the plan; the owner may want some of them done.
 
-- A comment in `SwiftDataRepositoriesTests.swift` (above
-  `v1StoreOpensAsPageByPage`) still says the test "passes with no migration
-  stages". Task 2's check showed that is no longer true. A reader of the test
-  would be misled; nothing a user sees.
-- A test's display name in `LibraryOrderTests.swift` says "any starting
-  arrangement of the array"; "arrangement" is an Avoid word. The text is the
-  plan's.
+- (Done in the final fix wave, see "The final review's fixes": the stale comment
+  above `v1StoreOpensAsPageByPage` and the test name that used an Avoid word.)
 - The Title tests depend on the language the machine runs under (Apple: the
   method "uses the current locale"); they were run only under this Mac's.
 - There is never more than one stored Library Order record only because the code
@@ -914,8 +963,9 @@ None is a defect against the plan; the owner may want some of them done.
 - Task 3's model test for a failed save checks the screen's state right after the
   call, and a wrongly announced change would arrive a moment later, so it could
   pass by timing; the Library-level test is the real guard.
-- The screen's model sets the Library Order before it reads the Books; if reading
-  the Books fails, the two disagree until the next reload.
+- The screen's model sets the Library Order before it reads the Books; if only
+  reading the Books fails, the two disagree until the next reload. (After a launch
+  that could not start, the two now agree; see "The final review's fixes".)
 - No fixed menu order was set; from the top bar the menu opened in the order
   written on iOS 26.5, but Apple says iOS may put the first choices nearest the
   finger when a menu opens from lower down.
@@ -943,9 +993,12 @@ saved file contents and commits that no branch points to any more.
   changed.
 - **What is lost, and cannot be recovered.** The reflog entries and any stash
   entries. A user of the app is not affected. What the owner loses is the undo
-  trail: for work before 2026-11-11, git can no longer be asked "where was this
-  branch yesterday" to recover a commit that was dropped or a branch that was
-  reset.
+  trail: git's records of where each branch used to point now begin at 12:55 on
+  2026-11-11 (the amended Task 5 commit), so the undo records for everything
+  before that moment are gone, including the earlier steps of this very slice.
+  `main`'s record is empty and the list of stashed work is empty. Git can no
+  longer be asked "where was this branch before" to recover a commit that was
+  dropped or a branch that was reset. The commits themselves are safe.
 - **Rule from now on.** Nothing in this slice runs `git gc`, `git prune`,
   `git reflog expire` or `git stash drop`, or anything else that deletes history
   or recovery data. A file edit that goes wrong is undone with `git checkout --
@@ -960,4 +1013,5 @@ saved file contents and commits that no branch points to any more.
 | d913995 | feat(library): the Library owns its Library Order, orders its items by it and announces LibraryOrderChanged |
 | 16bed1e | feat(library): a Sort menu chooses the Library Order on iPhone, iPad and Mac |
 | dead949 | docs(library): record the Library Order decisions and the owner's check list |
-| (this) | docs(library): correct the check list to what was seen and record the git clean-up incident |
+| 2d44247 | docs(library): correct the check list to what was seen and record the git clean-up incident |
+| (this) | fix(library): the Sort ticks follow the saved Library Order after a failed launch, plus wording and comments the final review found |

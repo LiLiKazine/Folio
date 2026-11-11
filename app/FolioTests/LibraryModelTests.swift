@@ -38,6 +38,29 @@ import UniformTypeIdentifiers
         func remove(id: ImportID) async throws { try await base.remove(id: id) }
     }
 
+    /// Import storage whose first read of In Progress Imports fails and every later
+    /// read succeeds, so `Library.start()` fails once and the reload after it works.
+    private actor FirstInProgressReadFailsImportRepository: ImportRepository {
+        private let base = InMemoryImportRepository()
+        private var hasFailed = false
+
+        func imports(status: ImportStatus) async throws -> [Import] {
+            if status == .inProgress, !hasFailed {
+                hasFailed = true
+                throw RepositoryFailure()
+            }
+            return try await base.imports(status: status)
+        }
+
+        func importRecord(id: ImportID) async throws -> Import? {
+            try await base.importRecord(id: id)
+        }
+
+        func add(_ record: Import) async throws { try await base.add(record) }
+        func update(_ record: Import) async throws { try await base.update(record) }
+        func remove(id: ImportID) async throws { try await base.remove(id: id) }
+    }
+
     /// Source access that holds every Import inside `withAccess` until its task is
     /// cancelled, so the first Import stays In Progress and later ones stay Queued.
     /// A Source named `unheldSourceName` is not held.
@@ -921,6 +944,35 @@ import UniformTypeIdentifiers
 
         // The reload that follows reads In Progress Imports too and also fails, but
         // one failure at launch is one Notice.
+        #expect(
+            copy(of: model.notices) == [
+                [
+                    "Couldn't Open the Library",
+                    "Folio couldn't open its Library. Relaunch Folio; if it keeps happening, free up storage.",
+                ]
+            ])
+    }
+
+    @Test("after a launch that could not start, the Library Order shown is the saved one")
+    func libraryOrderAfterFailedStart() async throws {
+        let bookRepository = InMemoryBookRepository()
+        let libraryOrders = InMemoryLibraryOrderRepository()
+        let saved = LibraryOrder(sort: .title, direction: .ascending)
+        try await libraryOrders.save(saved)
+        let fixture = try makeFixture(
+            books: bookRepository, imports: FirstInProgressReadFailsImportRepository(),
+            libraryOrders: libraryOrders)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        try await addBook(titled: "B", imported: 2, to: bookRepository, in: fixture)
+        try await addBook(titled: "A", imported: 1, to: bookRepository, in: fixture)
+        let model = fixture.model
+        let task = try await startModel(model)
+        defer { task.cancel() }
+
+        // start() failed once, so the Library said so; the reload that followed worked,
+        // so the grid and the Sort menu's ticks must agree on the saved Library Order.
+        #expect(titles(of: model.items) == ["A", "B"])
+        #expect(model.libraryOrder == saved)
         #expect(
             copy(of: model.notices) == [
                 [

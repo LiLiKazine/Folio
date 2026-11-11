@@ -75,9 +75,11 @@ import Observation
     }
 
     /// Loads what it can after a failure that has already queued its Notice, without
-    /// a second one. `context` names that failure in the log.
+    /// a second one: the Library Order and the items, as `loadItems()` does, so the Sort
+    /// menu's ticks and the grid agree. `context` names that failure in the log.
     private func reloadAfterNotice(_ context: String) async {
         do {
+            libraryOrder = try await library.libraryOrder()
             items = try await library.items()
         } catch {
             // Log-only: the Notice just queued already tells the user; a successful

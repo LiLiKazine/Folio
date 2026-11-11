@@ -98,8 +98,8 @@ import Testing
 
     @Test("a store written by the first schema opens in the current one, as Page by Page")
     func v1StoreOpensAsPageByPage() async throws {
-        // This also passes with no migration stages: it shows the old store opens, not that
-        // the stage is what opens it.
+        // Observed 2026-11-11: removing the V2 to V3 stage makes this test fail, so it
+        // exercises both stages (V1 to V2 and V2 to V3), not only the first.
         let directory = FileManager.default.temporaryDirectory
             .appending(path: UUID().uuidString, directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

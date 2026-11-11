@@ -85,9 +85,9 @@ struct LibraryOrderTests {
     }
 
     @Test(
-        "Descending is Ascending reversed, for every Sort and any starting arrangement of the array",
+        "Descending is Ascending read from the other end, for every Sort and whatever order the array starts in",
         arguments: LibraryOrder.Sort.allCases)
-    func descendingIsAscendingReversed(sort: LibraryOrder.Sort) {
+    func descendingIsAscendingFromTheOtherEnd(sort: LibraryOrder.Sort) {
         // Six Books: two share a Title, two share an imported time, one was opened.
         let books = [
             book("Vol 1", imported: 10),
