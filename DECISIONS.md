@@ -850,8 +850,8 @@ The menu is dimmed while the Library has no Books, although Apple's guidelines
 say a menu whose items are all unavailable should stay openable. What the user
 experiences: with an empty Library the toolbar Sort cannot be opened. On the Mac
 an empty Library therefore shows a dimmed toolbar Sort next to a live View →
-Sort By, which is dimmed only when no Library window is in front. The owner is
-asked to confirm this in the implementation log (ruling 6).
+Sort By, which is dimmed only when no Library window is in front. The owner
+confirmed this on 2026-11-11 (implementation log, ruling 6).
 
 **Not yet verified.** Everything on the Mac (agents send no input to the owner's
 Mac, so the toolbar placement, View → Sort By, two windows, and the menus'

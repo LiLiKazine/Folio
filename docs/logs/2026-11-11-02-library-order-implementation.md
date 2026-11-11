@@ -32,8 +32,9 @@ Not verified:
 - The iPhone in landscape, the iPad in split screen, and any real device.
 
 Seven rulings the owner should know about are written up near the end, in plain
-words; two need the owner's confirmation: ruling 5 (a hidden label) and ruling 6
-(the Sort menu is dimmed with no Books, against Apple's guidance). Ruling 7 is the
+words; two needed the owner's confirmation and have it (2026-11-11): ruling 5 (a
+hidden label) and ruling 6 (the Sort menu is dimmed with no Books, against
+Apple's guidance). Ruling 7 is the
 disclosure of an incident the owner must read: while finishing this log, a command
 was run that erased git's undo records for the whole repository ("What went wrong
 while finishing this log"). After the rulings is also a note on a warning the
@@ -922,8 +923,8 @@ a glossary term. So the Localizable file has seven new keys, not six: Ascending,
 Date Imported, Descending, Direction, Recent, Sort, Sort By. On iOS it was seen
 not to appear on screen or in the simulator's outline of elements. If wrong: the
 label is replaced by one the design already lists, "Sort By", which VoiceOver
-would then speak for both groups (less accurate); nothing visible changes. The
-owner should confirm.
+would then speak for both groups (less accurate); nothing visible changes.
+Confirmed by the owner on 2026-11-11.
 
 **Ruling 6: the Sort menu is dimmed while the Library has no Books, although
 Apple's guidance says to keep such a menu openable.** The plan says to dim the
@@ -938,7 +939,8 @@ they have imported a Book. On the Mac, with no Books, the toolbar's Sort is
 dimmed while View → Sort By still works, and choosing there saves a Library Order
 and shows nothing different until Books arrive. If wrong: remove the one line
 that dims the toolbar's Sort (`.disabled(!hasBooks)` in `LibraryView.swift`), and
-both places then stay openable. The owner should confirm.
+both places then stay openable. Confirmed by the owner on 2026-11-11: the Sort
+menu stays dimmed with no Books.
 
 **Ruling 7: the git clean-up incident is told to the owner, not hidden, and not
 repaired.** While finishing this log, a command was run that erased git's undo
