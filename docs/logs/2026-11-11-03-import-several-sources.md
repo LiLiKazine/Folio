@@ -1,8 +1,8 @@
 # 2026-11-11-03: Importing several Sources at once — implementation
 
-**Status:** In progress (Tasks 1 and 2 of 3 done). Everything on the Mac and on a real
-device is unchecked. On iPhone and iPad the picker was seen working on
-simulators only.
+**Status:** Implemented; the owner's checks are pending. Everything on the Mac and on
+a real device is unchecked. On iPhone and iPad the picker was seen working on
+simulators only (see the check list).
 
 Terms used here: the *file picker* is the system screen Folio shows so the
 reader can choose Sources; the *permission to read a picked item* (Apple calls
@@ -20,6 +20,10 @@ referenced gets its own Notice naming it, and the Sources after it are still
 imported. If the Library cannot save an Import at all, every Source is still
 tried and one "Couldn't Import" Notice is shown for all of them.
 
+On the Mac, dropping several folders and zips on the Library window imports each;
+a drop holding anything that is not a folder or a zip is refused whole and springs
+back, and nothing is imported.
+
 What a reader notices: on iPhone, picking one zip now takes one more tap (tap the
 zip to tick it, then press Open), because a picker that allows several waits for
 confirmation. A folder is picked as before: go into it and press Open.
@@ -32,18 +36,124 @@ nothing changes in `FolioCore`; the model now creates an Import for each Source
 handed to it. Design: `docs/superpowers/specs/2026-11-11-import-several-sources-design.md`.
 Plan: `docs/superpowers/plans/2026-11-11-import-several-sources.md`.
 
+## Options considered and rejected
+
+| Question | Chosen | Rejected and why |
+|----------|--------|------------------|
+| Folders in the picker | Picked one at a time, as before; the system picker on iPhone and iPad does not tick folders | Ticking folders and zips in any mix: the test build showed the system picker cannot do it |
+| Zips found inside a picked folder | A picked folder is still one Book of its own Pages | Looking inside it for zips: one Source would become several Books, which an Import never does |
+| Order of the Imports | The order the picker or the drop delivers | Making it match the order ticked: the picker delivers in its own order and the owner said it need not match |
+| The Library cannot save | Every Source is tried, one "Couldn't Import" Notice with a fixed message | Naming the Source in that Notice (new words, ten identical dialogs); stopping at the first failure (a failure would stop the rest) |
+| "Zips only" | Not enforced: Folio imports whatever the picker delivers | A check or a Notice for folders: new words on screen for a case the owner did not ask to block |
+| A drop with something else in it | Refused whole | Importing the folders and zips and ignoring the rest: a half-accepted drop leaves the reader guessing |
+
+## The owner's check list
+
+"Seen" means seen by the builder on a simulator, with the device and iOS version;
+"not checked" means nobody has looked. Nothing here was checked on a real device or
+on the Mac.
+
+### iPhone
+
+1. **Ticking several zips from the Files app on a real iPhone.** Real iPhone: not
+   checked. Seen on the iPhone 17 Pro simulator (iOS 26.5): ticking three zips and
+   pressing Open gave three Books with no Notice.
+2. **One folder picked as before.** Seen on the iPhone 17 Pro simulator (iOS 26.5):
+   going into a folder and pressing Open gave one Book of its three Pages. Real
+   iPhone: not checked.
+3. **One zip that fails among several.** Seen on the iPhone 17 Pro simulator (iOS 26.5):
+   with two good zips and a zip holding no images ticked, the screen showed a Notice
+   "Couldn't Import “Empty.zip” / No images found", a Failed card named "Empty"
+   with a Retry button, and the two good zips as new Books. Real iPhone: not
+   checked.
+4. **Picking exactly one zip still works.** Seen on the iPhone 17 Pro simulator (iOS 26.5):
+   one Book; it takes a tap on the zip and then Open, one more tap than before.
+5. **Cancelling the picker does nothing.** Seen on the iPhone 17 Pro simulator (iOS 26.5): swiping
+   the picker away changed nothing and showed no Notice. The picker's own
+   Cancel and confirming with nothing ticked: not checked.
+6. **The Import cards while Imports wait.** Not checked: the small test zips finished
+   before the next screen read. With ten larger zips the first should show In
+   Progress and the rest Queued, in the order delivered.
+
+### iPad
+
+7. **Ticking several zips.** Seen on the iPad Pro 11-inch (M5) simulator (iOS 26.5): three
+   zips gave three Books; a folder in the same listing could not be ticked.
+8. **One folder picked as before.** Seen on the iPad Pro 11-inch (M5) simulator (iOS 26.5): one Book.
+9. **A failing zip among several, and picking exactly one zip, on an iPad.** Not
+   checked (seen on the iPhone simulator only).
+
+### Mac (nothing checked)
+
+10. **The Mac's picker and File → Import… with several.** Not checked: tick several
+    zips and press Open; each should become a Book. Whether the Mac's picker lets
+    folders and zips be chosen together was never tried; if it does, each should
+    become a Book, and nothing in Folio blocks it.
+11. **Dropping several folders and zips on the Library window.** Not checked: three
+    zips and a folder should give four Import cards, in the drop's order, then four
+    Books.
+12. **A drop with a PDF among zips.** Not checked: the drop should spring back and
+    nothing should be imported, no Notice.
+13. **Exactly one Source picked or dropped still works.** Not checked: one zip or one
+    folder picked, and one zip or one folder dropped, each gives one Book as before.
+14. **The Library unable to save.** Not checked on any device: with a full disk,
+    ticking several should give no Import cards and one "Couldn't Import" Notice
+    (a test forces it).
+
+## Rulings
+
+Each is what I decided on the owner's behalf, why, and what a user experiences if
+it is wrong.
+
+1. **One implementation log**, this file, started in Task 1's commit and extended
+   by each task, although the plan creates it in Task 3. Tasks 1 and 2 had Apple
+   text and simulator sightings to record before Task 3. Wrong would cost: one file
+   split or merged; nothing a user sees.
+2. **Commit trailers name Claude Fable 5.2 and session …3tw3CStM**, as the plan and
+   the owner's prompt direct. The model that did the work is Claude Sonnet 5.5, so
+   the line names a different model than the one that wrote the code. Wrong would
+   cost: the three commits' trailers amended; nothing a user sees. The owner decides.
+3. **No keystrokes or clicks to the Mac, and no history-erasing commands** (the
+   owner's rules, kept). Wrong would cost nothing: they were kept.
+4. **The "Library cannot save" test counts attempts.** The plan names the existing
+   failing-storage stand-in, which cannot show that every Source was tried (three
+   identical failures look the same as one). The test uses a small stand-in in the
+   test file that counts how many times it was asked to save, and the test checks
+   three attempts as well as one Notice and no items. Wrong would cost: a test
+   rewritten; nothing a user sees.
+5. **No earlier decision entry needed correcting.** The plan asks to correct the
+   entry that says the Mac drop takes one Source; no entry in `DECISIONS.md` says
+   it (only the code's comments did, and they were updated). Wrong would cost: one
+   sentence added later; nothing a user sees.
+
+## What was discovered
+
+- Folio's own rule that a repeated Notice shows once is what turns "ten Sources, the
+  Library cannot save" into one Notice; the test pins it with three Sources.
+- A picked Source's permission to read it must be claimed and given back for each
+  Source, one at a time, and Apple's page says each URL carries its own; the loop
+  does exactly that and gives the permission back only when claiming it worked.
+- The picker remembers where it was last used, including inside a folder, so a second
+  visit can start there; this made the simulator checks need an extra tap and is the
+  system's behaviour, not Folio's.
+- The first tap on Open in an iPad check did not register when addressed by its
+  label; a tap at its position worked. That is a driving detail of the simulator
+  tool, not an app behaviour.
+- The Mac drop's ordering of items and its spring-back are not documented on
+  Apple's page and could not be seen without driving the Mac.
+
 ## Task 1: The model imports several Sources; the picker allows several
 
 ### What Changed
 
 - `app/Folio/Library/LibraryModel.swift`: `importSources(_:)` replaces
   `importSource(_:)`. It goes through the Sources in order, awaiting each before
-  the next (never one task per Source). For each Source it claims the permission
+  the next (never started side by side). For each Source it claims the permission
   to read the picked item, creates the Import through the existing Import
   operation, and gives the permission back. A Source that fails queues the same
   Notice a single Import would, and the loop carries on.
 - `app/Folio/Library/LibraryWindow.swift`: the file picker is presented with
-  several allowed; every picked URL goes to the model in one task; an empty result
+  several allowed; every picked URL goes to the model in a single call; an empty result
   (picker confirmed with nothing) does nothing. The claim and release of the
   permission moved out of the window into the model. The Mac drop target still
   hands over one Source for now (`{ importSources([$0]) }`); Task 2 changes it.
@@ -139,7 +249,7 @@ Queued, a real device, the Mac.
 ### Gate
 
 `./scripts/test.sh` passes on iOS and macOS; `./scripts/format.sh --check` clean.
-`./scripts/verify.sh` runs after Task 3.
+`./scripts/verify.sh` was run after Task 3 (see Task 3).
 
 ### Not checked
 
@@ -205,10 +315,37 @@ picture among them, the order the Imports run in, and dropping exactly one Sourc
 are on the owner's check list as not checked. The rule for which URLs are Sources
 is covered by the unit tests above.
 
+## Task 3: Decisions, this log and the owner's check list
+
+### What Changed
+
+- `DECISIONS.md`: one dated entry, in plain language, covering several Sources
+  ticked or dropped at once; zips only in the picker on iPhone and iPad and why;
+  one more tap for one zip; the order within a visit; a picked folder staying one
+  Book; a drop with anything else refused whole; each failure keeping its own Notice
+  except when the Library cannot save; and that nothing in `FolioCore` or on screen
+  changed. No earlier entry said the Mac drop takes one Source, so none was
+  corrected (Ruling 5).
+- This log: summary, options, the owner's check list, rulings, what was discovered,
+  the three tasks and the commits.
+
+### Gate
+
+`./scripts/verify.sh` on this branch's head after the three tasks:
+
+```
+==> green — all enabled platforms format, build, test, and launch
+```
+
+It exited 0; the test step passed on iOS and macOS (FolioCore 107 tests, the app 140
+tests on macOS). The launch step starts the app on the simulator and on the Mac and
+takes a screenshot; no input was sent to the Mac.
+
 ## Commits
 
 | Commit | Subject |
 | --- | --- |
 | c58d5b0 (main) | docs(import): the design and plan for importing several Sources at once |
 | bedcf2c | feat(import): the file picker takes several Sources and each becomes its own Import |
-| (this) | feat(import): several folders and zips dropped on the Mac's Library window are each imported |
+| aa4967d | feat(import): several folders and zips dropped on the Mac's Library window are each imported |
+| (this) | docs(import): record the decisions for importing several Sources and the owner's check list |
