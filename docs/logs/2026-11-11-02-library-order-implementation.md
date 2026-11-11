@@ -1,9 +1,39 @@
 # 2026-11-11-02: Library Order — implementation
 
-**Status:** In progress. Tasks 1 to 4 of 5 are done (the Library Order value
-and its ordering rule, where it is saved, the Library keeping it and the
-Library screen's model following it, and the Sort menu that chooses it). The
-owner's check list and the final summary are written by Task 5.
+**Status:** Implemented; the owner's checks are pending. Everything on the Mac
+is unchecked, and so is everything on a real device. On iPhone and iPad it was
+seen working on simulators only (see the check list).
+
+## Summary
+
+The reader can now choose how the Library's Books are ordered. The *Library
+Order* is a Sort (Recent, Title or Date Imported) and a Direction (Ascending or
+Descending), chosen separately, and the Library remembers it across launches. It
+starts as Recent, Descending, which is the order the Library always had, so a
+reader who never opens the menu sees no change. It is chosen from a menu labelled
+"Sort" in the toolbar on iPhone, iPad and Mac, and on the Mac also from View →
+Sort By. Imports that have not produced a Book stay at the front under every
+Library Order. A choice that cannot be saved leaves the grid as it was and shows
+a Notice, "Couldn't Choose Library Order". A Library saved by the previous
+version opens with every Book in place, in Recent, Descending.
+
+Verified: `./scripts/verify.sh` is green (format, build, test and launch on iOS
+and macOS; its last line is quoted under "Tests"), and every Task 4 simulator
+check was seen on the iPhone 17 Pro simulator and the iPad Pro 11-inch (M5)
+simulator, both iOS 26.5, as the check list says item by item.
+
+Not verified:
+
+- Anything on the Mac: where the toolbar's Sort lands, View → Sort By, two
+  windows following each other, and how the Mac's menus dim. No agent sends input
+  to the owner's Mac, so every Mac item is on the check list.
+- What VoiceOver (Apple's screen reader) says for the menu.
+- A failed save seen in the running app; a test forces it and checks the Notice.
+- The iPhone in landscape, the iPad in split screen, and any real device.
+
+Six rulings the owner should know about are written up near the end, in plain
+words; two need the owner's confirmation: ruling 5 (a hidden label) and ruling 6
+(the Sort menu is dimmed with no Books, against Apple's guidance).
 
 ## Context
 
@@ -19,14 +49,127 @@ place of the real storage; a *failing stand-in* is one that can be told to fail
 chosen operations, to test what the user sees when storage fails. A *tie* is
 two Books that the chosen Sort cannot tell apart.
 
-## Task 1: The Library Order value, its ordering rule and its port (FolioCore)
+## The owner's check list
+
+Each line says what to do and what you should see. "Seen on a simulator" names
+the device and iOS version where an agent saw it; "not checked" means nobody has
+tried it. The Mac has not been touched by any agent, so every Mac line is not
+checked. Terms: *Select* is the iPad's toolbar button for choosing several Books
+at once; a *Library window* is a window of the Mac app that shows the Library
+(there can be several); *Sort By* is the View menu's submenu on the Mac; a *tick*
+is the check mark beside the Sort and the Direction in force. Books named "Strip
+..." are the generated test Books from the Reading Mode checks; any Books with
+different Titles and different Import times will do.
+
+### iPhone
+
+1. Open the Sort menu: three Sorts (Recent, Title, Date Imported), a thin line,
+   then two Directions (Ascending, Descending), with one Sort and one Direction
+   ticked and no words above either group. Seen on a simulator (iPhone 17 Pro,
+   iOS 26.5).
+2. Choose each Sort in each Direction (six combinations) and look at the grid:
+   Title puts "Vol 2", "Vol 3", "Vol 10" in that order, ignoring capital
+   letters; Date Imported puts the Book imported first at the start (Ascending);
+   Recent puts the Book opened longest ago first (Ascending); Descending is
+   exactly the same list the other way round. Seen on a simulator (iPhone 17
+   Pro, iOS 26.5): Title and Date Imported in both Directions, Recent in both
+   Directions (Descending at launch, Ascending by choice).
+3. Choosing a Sort keeps the Direction, and choosing a Direction keeps the Sort.
+   Seen on a simulator (iPhone 17 Pro, iOS 26.5).
+4. Quit Folio and open it again: the grid and the ticks are as you left them.
+   Seen on a simulator (iPhone 17 Pro, iOS 26.5), with Title, Ascending.
+5. A Library from the previous version: run this version over a Library saved by
+   the previous one without deleting the app's data. Every Book is there, in
+   Recent, Descending. Seen on a simulator (iPhone 17 Pro, iOS 26.5): its Library
+   had been written by an earlier build, with no saved Library Order, and opened
+   with all eight Books in Recent, Descending. Not checked on a real device or
+   with a Library from an installed release.
+6. Under Recent, open a Book from the middle of the grid and close it: with
+   Descending it comes back first, with Ascending last. Seen on a simulator
+   (iPhone 17 Pro, iOS 26.5).
+7. Under Title, open a Book and close it: it does not move. Seen on a simulator
+   (iPhone 17 Pro, iOS 26.5).
+8. Under Title, rename "Strip Two" to "Strip Alpha": it moves to its new place
+   by Title when the rename is saved. Seen on a simulator (iPhone 17 Pro, iOS
+   26.5).
+9. Scroll down the grid and then choose a Direction: the grid stays about where
+   it was and does not jump to the top. Seen on a simulator (iPhone 17 Pro, iOS
+   26.5).
+10. With no Books, the Sort button is dimmed. Seen on a simulator for the iPad
+    (below); not checked on the iPhone.
+11. A failed save: make the Library's storage refuse a write and choose another
+    Sort. The grid and ticks stay, and a Notice "Couldn't Choose Library Order"
+    appears. Not checked in the running app (a test forces the failure and checks
+    the Notice).
+12. VoiceOver: what it says on the Sort button and the menu's choices, and that
+    "Sort" and "Direction" are spoken as the names of the two groups. Not
+    checked.
+13. Turn the iPhone to landscape, then open the menu. Not checked.
+
+### iPad
+
+1. With no Books, Sort and Select are dimmed and Import is not. Seen on a
+   simulator (iPad Pro 11-inch (M5), iOS 26.5).
+2. With Books, the toolbar reads Sort, Select, Import and none has moved out of
+   the bar; in Select mode it reads Sort, Done, Import. Seen on a simulator
+   (iPad Pro 11-inch (M5), iOS 26.5).
+3. Choose Title and Date Imported, each in both Directions: the grid is in the
+   expected order each time. Seen on a simulator (iPad Pro 11-inch (M5), iOS
+   26.5). Recent was not tried on the iPad: not checked.
+4. In Select mode, select a Book and then choose another Sort: the tick stays on
+   that Book in its new place and the bar still says "Delete (1)". Seen on a
+   simulator (iPad Pro 11-inch (M5), iOS 26.5).
+5. Quit and open again: the choice is kept (Title, Descending), and Select is
+   still there. Seen on a simulator (iPad Pro 11-inch (M5), iOS 26.5).
+6. Opening a Book under Recent and under Title, renaming under Title, and a
+   Library from the previous version: not checked on the iPad (they were seen on
+   the iPhone simulator only).
+7. Split screen and slide over: the Sort button stays visible. Not checked.
+
+### Mac (nothing checked)
+
+1. Where Sort sits in the window's toolbar: beside Import or apart from it, and
+   the tip "Sort" when you point at it. Not checked.
+2. Choose each Sort in each Direction from the toolbar's Sort, with Books of
+   different Titles and Import times: the grid is in the expected order each
+   time, as on the iPhone. Not checked.
+3. Quit Folio and open it again: the grid and the ticks are as you left them.
+   Not checked.
+4. Open View → Sort By: the same two groups as the toolbar (three Sorts, a line,
+   two Directions) with the same ticks, and no "Sort" or "Direction" heading in
+   either place. Not checked.
+5. Choose from View → Sort By, then from the toolbar, and see that the ticks in
+   both places always agree. Not checked.
+6. Whether Sort By sits directly above Show Toolbar with no separating line, and
+   whether that looks wrong. Not checked.
+7. With no Library window in front (close every window but keep Folio
+   running), View → Sort By is dimmed. Not checked.
+8. Two Library windows at once: choose Title in one and both reorder and both
+   move their ticks. Not checked.
+9. With a Book open in a window, View → Sort By still works, and the grid behind
+   the Book is in the new order when you close the Book. Not checked.
+10. With no Books at all, the toolbar's Sort is dimmed, while View → Sort By can
+    still be used (choosing there saves a Library Order and shows nothing
+    different until Books arrive). This disagreement is ruling 6 below. Not
+    checked.
+11. Under Recent, open a Book and close it: it comes first (Descending) or last
+    (Ascending). Under Title, open a Book: it does not move. Rename a Book under
+    Title: it moves when the rename is saved. Not checked.
+12. A Library from the previous version, run over without deleting the app's
+    data: every Book is there, in Recent, Descending. Not checked.
+13. Select several Books (the Mac's selection) and choose another Sort: the
+    selection stays on the same Books in their new places. Not checked on the
+    Mac (seen on the iPad simulator for one Book).
+14. A failed save and VoiceOver, as for the iPhone. Not checked.
+
+## Task 1: The Library Order value, its rule for placing Books and its port (FolioCore)
 
 ### What Changed
 
 - `Domain/LibraryOrder.swift` (new): `LibraryOrder`, a Sort (`recent`, `title`,
   `dateImported`) and a Direction (`ascending`, `descending`), with
-  `LibraryOrder.initial` as Recent, Descending. `[Book].ordered(by:)` puts Books
-  in a Library Order. Each Sort defines one Ascending comparison and Descending
+  `LibraryOrder.initial` as Recent, Descending. `[Book].ordered(by:)` is the
+  Library Order rule: it puts Books in a Library Order. Each Sort defines one Ascending comparison and Descending
   is that list reversed, so flipping the Direction twice gives the same list
   back, ties included:
   - Recent: the time last opened, or the time imported if never opened, earlier
@@ -122,7 +265,10 @@ and Imports; a *schema* is the list of kinds of record the store holds, and each
 numbered *schema version* is one such list; a *migration* is how a store written
 in an older schema version is brought up to the current one when the app opens it;
 a *lightweight* migration is one SwiftData works out by itself from the
-difference between the two versions, with no code of ours.
+difference between the two versions, with no code of ours; a *stage* is one step
+of a migration, from one numbered schema version to the next (a store several
+versions behind goes through one stage per step); a *row* is one saved entry of a
+record kind in the store (one Book is one row).
 
 ### What Changed
 
@@ -199,8 +345,12 @@ Fetched on 2026-11-11 from `developer.apple.com/tutorials/data/documentation/`
   migration, referred to as lightweight migration. Lightweight migration infers
   the migration from the differences between the source and the destination
   managed object models." and "You can add, remove, and rename entities in the
-  hierarchy." Adding a record kind, which is all version 3 does, is therefore a
-  change a lightweight migration handles. The brief named a page called "Using
+  hierarchy." (That last sentence comes from the page's discussion of entity
+  hierarchies; an *entity* is Core Data's word for a record kind. It is about
+  hierarchies of entities, not about adding one to a model, so for version 3 it
+  is support by analogy, not a statement of the exact case.) Adding a record kind,
+  which is all version 3 does, is therefore likely to be a change a lightweight
+  migration handles; that it is one is observed (below). The brief named a page called "Using
   Lightweight Migration"; that address returned nothing, and this page is the
   Core Data page on the same subject.
 
@@ -250,7 +400,7 @@ Fetched on 2026-11-11 from `developer.apple.com/tutorials/data/documentation/`
   the Title Sort the Books stay in alphabetical order.
 - Storage no longer orders Books. The Book storage (the in-memory stand-in and
   the SwiftData one) now returns every Book in no promised order, and the old
-  ordering rule for Books was deleted, so the Library is the only place that
+  rule for placing Books was deleted, so the Library is the only place that
   decides the order. The SwiftData storage also lost its sort by identifier, whose
   only job was to make ties in that old rule come out the same each time; the new
   rule settles its own ties (Task 1).
@@ -401,8 +551,8 @@ Human Interface Guidelines (`design/human-interface-guidelines/...`):
   `line.3.horizontal.decrease`.
 - **Menus:** "Consider grouping logically related items. ... To help people
   visually distinguish such groups, use a separator." "Consider using a
-  checkmark to show that an attribute is currently in effect." "Use title-style
-  capitalization." On submenus: "instead of offering separate menu items for
+  checkmark to show that an attribute is currently in effect." "To be consistent
+  with platform experiences, use title-style capitalization." On submenus: "instead of offering separate menu items for
   Sort by Date, Sort by Score, and Sort by Time, a game could present a menu item
   that uses a submenu to list the sorting options Date, Score, and Time. It
   generally works well to use the repeated term — in this case, Sort by — in the
@@ -576,3 +726,198 @@ Books imported through the file picker from copies of the iPhone's Sources:
   here cannot turn the device, and doing it from the Simulator app's menu would be
   input to the Mac.
 - **Real devices.** Only simulators were used.
+
+## Task 5: Decisions, this log and the check list
+
+### What Changed
+
+- `DECISIONS.md`: one new entry, "2026-11-11: Library Order", with the five
+  decisions the design asked for: a Sort and a Direction chosen separately; the
+  Library owns the Library Order and saves it in its own database (the third
+  database version, and what a Library from the previous version experiences);
+  what each Sort compares and the three alternatives rejected for Date Imported;
+  a failed save leaves the grid as it was and shows a Notice, unlike Reading
+  Mode; no "Order" heading on the menu. Each says what a user experiences. No
+  earlier entry said there is one Library order (searched for "order", "recent",
+  "sort", "newest"), so none was corrected.
+- `CLAUDE.md`, "Library and Import code": `LibraryOrder` and the rule that places
+  Books in it, and `LibraryOrderRepository`, in `Domain/`; `LibraryOrderModel` and
+  `SwiftDataLibraryOrderRepository` in `Persistence/`; the Sort menu in
+  `Library/`.
+- This log: the summary, the owner's check list, the closing sections below, and
+  the fixes deferred from earlier reviews: the Avoid word "ordering" is no longer
+  in the log (Task 1's heading and status, and Task 3, now say "the rule for
+  placing Books"); "stage" and "row" are defined where Task 2 first uses them;
+  the Core Data sentence "You can add, remove, and rename entities in the
+  hierarchy" now says it comes from that page's discussion of entity hierarchies;
+  and the Task 4 quote from the Human Interface Guidelines' Menus page now reads
+  "To be consistent with platform experiences, use title-style capitalization.",
+  as Apple wrote it (it had been shortened to "Use title-style capitalization.").
+- No code changed in this task.
+
+### Apple documentation relied on
+
+None new. The quotes are in Tasks 1, 2 and 4. For this task the Human Interface
+Guidelines' Menus page was fetched again
+(`developer.apple.com/tutorials/data/design/human-interface-guidelines/menus.json`,
+2026-11-11), which confirmed the capitalisation sentence as now quoted in Task 4
+and the sentence about a menu whose items are all unavailable (Apple writes the
+apostrophe in "menu's" as a curly one). The quotes for `primaryAction`,
+`CommandGroup(before:)`, `CommandGroupPlacement.toolbar`, `help(_:)`, the
+menu-bar article and the Guidelines' View menu line were taken from the Task 4
+report and were not fetched again for this task or by the reviewer.
+
+## Tests
+
+`./scripts/verify.sh`, run for this task on this Mac with the current branch
+(no code differs from the Task 4 commit), exit code 0. Its final line:
+
+> green — all enabled platforms format, build, test, and launch
+
+- Format check: clean. `./scripts/format.sh --check` run again afterwards: clean.
+- FolioCore: 107 tests in 9 suites passed, with warnings as errors, once for each
+  platform's run of the script.
+- App tests: `** TEST SUCCEEDED **` on iOS and on macOS.
+- Both apps built and launched (the script launches them and takes a screenshot;
+  nothing was typed or clicked on the Mac).
+- For this task's documents there is nothing to compile, so no test was added.
+
+## What was discovered
+
+- SwiftData accepts the same record classes in schema version 2 and version 3, so
+  version 2 did not have to be frozen as a copy. Observed, not documented.
+- Taking out the 2-to-3 stage makes both the version 1 and version 2 store tests
+  fail, so each is a real test of the stage. Observed, not documented. (One test
+  comment still says the version 1 test passes with no stages; that is out of date,
+  see "Items left for later".)
+- Launch cleanup removes a Book whose folder is missing, so tests that put Books
+  in storage must also make their folders. Existing behaviour.
+- The simulator tools report the menu's elements as exactly the five choices;
+  the hidden labels are not in that outline. Whether VoiceOver speaks them is not
+  checked.
+- The iPhone simulator's Library had been written by an earlier build and opened
+  correctly in Recent, Descending with all its Books, then gained the stored
+  Library Order record; each simulator ended with exactly one such record.
+- Choosing a Sort while scrolled leaves the grid where it was, give or take about
+  ten points; nothing is scrolled by code.
+
+## Not checked
+
+The Mac items, VoiceOver, a failed save in the running app, landscape and split
+screen, and real devices are listed with their check-list items above and in
+each task's "Not checked". Two more:
+
+- Title order under any language other than this Mac's (Apple's page says the
+  result differs by language).
+- A Library saved by a build the owner actually installed earlier; only stores
+  written by tests, and the one on the iPhone simulator, were opened.
+
+## Rulings made on the owner's behalf
+
+These are the calls the controller (the agent that coordinated the tasks) made.
+Its running list, the *ledger*, is kept outside the repository in
+`.superpowers/sdd/2026-11-11-library-order/`, a folder git does not track; this
+section restates every ruling in it, in plain words, each with what a user would
+experience if it is wrong. Two need the owner to confirm: rulings 5 and 6.
+
+**Ruling 1: one implementation log.** One log for the whole slice (this file),
+with a section per task, finished in Task 5, instead of a log per commit. If
+wrong: only where the record lives; nothing in the app.
+
+**Ruling 2: the closing lines of each commit message name a model that did not
+write the code.** Every commit on this branch ends with the two lines the plan and
+the owner's prompt give: "Co-Authored-By: Claude Fable 5.2" and the session whose
+address ends in 3tw3CStM. The tool's own suggestion was a different pair. The code
+was in fact written by Claude Sonnet 5.5 (Task 2's report says so, and the
+controller's note names it for the slice) and Claude Opus 5.5 (Task 4's report),
+each in a session other than the one named; the reports of Tasks 1 and 3 do not
+name their model. This task was written by Claude Sonnet 5.5 as well. The owner
+should decide whether the commit history should say that. If wrong: only those
+two lines of text in each commit are off, and they can be amended before merge;
+nothing in the app is affected.
+
+**Ruling 3: no input to the owner's Mac.** Carried over from the Reading Mode
+incident, where keystrokes an agent sent landed in another window. No agent sent
+keystrokes, clicks or pointer moves to the Mac; they drove only the iOS Simulator.
+Every Mac item is "not checked" and on the list. If wrong: nothing; it only means
+the Mac has not been looked at by anyone but the owner.
+
+**Ruling 4: commit subject lines use the plan's wording, including one with an
+Avoid word.** The first commit's subject (adf151d) says "ordering rule", and
+"ordering" is a word the glossary says to avoid for the Library Order. The subject
+was kept as the plan gives it, and not amended, because the history is local and
+the cost is one slip in a subject line. If wrong: the subject is amended before
+the branch is merged. Nothing in the app is affected. Everywhere else, including
+this log, the words are now "the rule for placing Books" or "the Library Order
+rule".
+
+**Ruling 5: a hidden label "Direction" on the Direction control stays (one string
+beyond the design's list).** The design listed the new on-screen words; the
+Direction control also needs a name that is never drawn, so that assistive tools
+such as VoiceOver can tell what the group is. Apple's page for hiding a label
+says to always give a control a label even when it is hidden, and "Direction" is
+a glossary term. So the Localizable file has seven new keys, not six: Ascending,
+Date Imported, Descending, Direction, Recent, Sort, Sort By. On iOS it was seen
+not to appear on screen or in the simulator's outline of elements. If wrong: the
+label is replaced by one the design already lists, "Sort By", which VoiceOver
+would then speak for both groups (less accurate); nothing visible changes. The
+owner should confirm.
+
+**Ruling 6: the Sort menu is dimmed while the Library has no Books, although
+Apple's guidance says to keep such a menu openable.** The plan says to dim the
+toolbar's Sort with no Books, and to dim View → Sort By only when no Library
+window is in front. Apple's Human Interface Guidelines for menus say: "If all of a
+menu's items are unavailable, the menu itself needs to remain available so people
+can open it and learn about the commands it contains", and for submenus "Make
+sure a submenu remains available even when its nested menu items are
+unavailable." It was built as the plan says. What a user experiences: with no
+Books the Sort button cannot be opened, so they cannot see what it offers until
+they have imported a Book. On the Mac, with no Books, the toolbar's Sort is
+dimmed while View → Sort By still works, and choosing there saves a Library Order
+and shows nothing different until Books arrive. If wrong: remove the one line
+that dims the toolbar's Sort (`.disabled(!hasBooks)` in `LibraryView.swift`), and
+both places then stay openable. The owner should confirm.
+
+**Ruling 7 (reported while building Task 2): a warning the build does not stop on.**
+The tests for the app show warnings about calling code that must run on the main
+thread from code that does not declare it, in `LibraryWindowTests.swift` and the
+Reading tests. They were there before this slice and are not in code it wrote.
+The project says "warnings are errors", but these do not fail the build, so the
+rule is not enforced for the test code. If left: nothing a user sees; but a new
+warning of that kind in a test would not be caught either, and the owner may want
+the rule made true or the exception recorded.
+
+### Items left for later
+
+None is a defect against the plan; the owner may want some of them done.
+
+- A comment in `SwiftDataRepositoriesTests.swift` (above
+  `v1StoreOpensAsPageByPage`) still says the test "passes with no migration
+  stages". Task 2's check showed that is no longer true. A reader of the test
+  would be misled; nothing a user sees.
+- A test's display name in `LibraryOrderTests.swift` says "any starting
+  arrangement of the array"; "arrangement" is an Avoid word. The text is the
+  plan's.
+- The Title tests depend on the language the machine runs under (Apple: the
+  method "uses the current locale"); they were run only under this Mac's.
+- There is never more than one stored Library Order record only because the code
+  has no path that adds a second; nothing in the store enforces it.
+- Task 3's model test for a failed save checks the screen's state right after the
+  call, and a wrongly announced change would arrive a moment later, so it could
+  pass by timing; the Library-level test is the real guard.
+- The screen's model sets the Library Order before it reads the Books; if reading
+  the Books fails, the two disagree until the next reload.
+- No fixed menu order was set; from the top bar the menu opened in the order
+  written on iOS 26.5, but Apple says iOS may put the first choices nearest the
+  finger when a menu opens from lower down.
+- The Mac toolbar placement (`automatic`) has not been seen.
+
+## Commits
+
+| Commit | Subject |
+| --- | --- |
+| adf151d | feat(library): the Library Order value, its ordering rule for Books and its repository port |
+| 7ca960d | feat(persistence): schema V3 stores the Library Order as one record |
+| d913995 | feat(library): the Library owns its Library Order, orders its items by it and announces LibraryOrderChanged |
+| 16bed1e | feat(library): a Sort menu chooses the Library Order on iPhone, iPad and Mac |
+| (this) | docs(library): record the Library Order decisions and the owner's check list |

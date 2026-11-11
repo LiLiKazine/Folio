@@ -749,3 +749,111 @@ simulator. The limits of that evidence:
   the iPhone simulator or the Mac.
 
 The owner's check list is in the implementation log.
+
+## 2026-11-11: Library Order
+
+The reader can now choose how the Library's Books are ordered. Terms used here:
+the *settings store* is the place Apple gives every app for small preferences;
+the *Library's database* is the file on the device that already holds the Books
+and Imports; a *database version* is the shape that file has, and the app
+upgrades a file saved in an older shape the first time it opens it; a *record*
+is one saved entry in that file. The reasoning that led here is in
+`docs/logs/2026-11-11-01-library-order-design.md`; the record of the work, with
+Apple's text for every behaviour relied on, what was seen on which simulator and
+the owner's check list, is
+`docs/logs/2026-11-11-02-library-order-implementation.md`.
+
+**The Library Order is a Sort and a Direction, chosen separately.** The Sorts
+are Recent, Title and Date Imported; the Directions are Ascending and
+Descending. The owner wanted what Books are ordered by kept apart from which
+way, so the menu is five choices that make six Library Orders, not six combined
+choices, and picking another Sort keeps the Direction. What the user
+experiences: in the Sort menu one Sort and one Direction are ticked at all
+times; changing one never changes the other. A Library that has never been
+given a choice is Recent, Descending, which is the order the Library always had,
+so a reader who never opens the menu sees no change. Rejected: one list of
+combined choices ("Title A to Z", "Title Z to A", and so on), and the words
+"Name" and "Date Added", which the glossary rules out (Title; and "add" is not
+used for an Import).
+
+**The Library owns the Library Order and saves it in its own database; there is
+one for the whole Library.** The Library already decides the order Books come in
+and announces what changes, so the choice belongs with it, and not with one
+screen. The settings store was considered, and the designer recommended it
+because it needs no upgrade step; the owner chose the database so that
+everything the Library remembers is in one file. The cost is a third database
+version, which adds one record kind holding the Library Order, with at most one
+record. The upgrade is lightweight, which means SwiftData (Apple's storage
+framework) carries the saved data across itself with no code of ours; that it
+does so for this change is observed in tests, and Apple's Core Data page on the
+subject (not SwiftData's) says adding a record kind is such a change. What a
+user experiences: a Library saved by the previous version opens with every Book
+in place and in Recent, Descending, and the choice survives quitting and
+relaunching. On the Mac, two windows show the same Library Order, and choosing
+in one reorders both. A saved Library Order this version does not recognise,
+written by a later version, reads as Recent, Descending so the Library still
+opens.
+
+**What each Sort compares.** Recent: the time the Book was last opened, or the
+time it was imported if it was never opened. Title: the Titles, compared the way
+the Finder compares file names (ignoring capital letters and counting digits as
+numbers by the device's language rules, so "Vol 2", "Vol 3", "Vol 10" come in
+that order). Date Imported: the moment the Book's Import began copying Pages,
+which every Book already stores. Books the Sort cannot tell apart (the same
+Title, or the same time) are put in order by the time they were imported and
+then by their identifier, so the grid never shuffles between loads, and
+Descending is exactly Ascending reversed. What the user experiences: nothing a
+reader does moves a Book under Date Imported; under Title a Book moves only
+when it is renamed (it moves when the rename is saved) and a new Book appears at
+its place by Title; under Recent a Book that was opened comes first (Descending)
+or last (Ascending) the next time the Library screen appears, as it did before,
+because the grid still does not reorder while a reader is tapping a Book. Imports
+that have not produced a Book (Queued, In Progress or Failed) stay at the front
+under every Library Order and both Directions. Three alternatives for Date
+Imported were rejected: the moment the Import finished (the same order of Books,
+and it would need a new stored time), the moment the Source was picked (differs
+only for an Import that was retried, and it too needs a new stored time), and the
+Source's own date on disk (a different idea, and a Book never refers to its
+Source). Not checked: the Title comparison under any language but the one the
+tests were run under, because Apple's page says the result "may be different
+under different locales".
+
+**A failed save of the Library Order leaves the grid as it was and shows a
+Notice, unlike Reading Mode.** The Library saves first and announces the change
+only afterwards, so when saving fails nothing on screen moves, the menu still
+shows the old choice ticked, and a Notice titled "Couldn't Choose Library
+Order" appears. A failed Reading Mode save is log-only (written to the system
+log and not shown) because the switch visibly works on screen and a Notice
+would interrupt reading; the owner agreed the stricter rule here, because a
+grid that quietly goes back to its old order at the next launch is worse than
+one that never moved. What the user experiences: a choice that looks made is
+saved, or they are told it was not. Choosing the Library Order already in force
+saves nothing and shows nothing.
+
+**The Sort menu has no "Order" heading, and the Mac's View menu has a "Sort By"
+submenu.** Screen copy uses glossary terms exactly, and the glossary avoids the
+bare word "order" for a Direction (Pages already have a reading order). The
+menu is therefore the three Sorts, a thin dividing line, then the two Directions,
+with no heading on either group; the choices in force carry a tick. The
+toolbar button is labelled "Sort" and drawn as up-and-down arrows. On the Mac the
+same two groups are also under View → Sort By, because Apple's guidelines say
+every toolbar item should also be a menu command, since a reader can hide or
+change the toolbar. What the user experiences: nothing is drawn above either
+group. Each group's control still carries a name for assistive tools such as
+VoiceOver, hidden from view ("Sort" and "Direction"); Apple says a control
+always needs a label even when it is hidden. What a screen reader says for the
+menu was not checked.
+
+The menu is dimmed while the Library has no Books, although Apple's guidelines
+say a menu whose items are all unavailable should stay openable. What the user
+experiences: with an empty Library the toolbar Sort cannot be opened. On the Mac
+an empty Library therefore shows a dimmed toolbar Sort next to a live View →
+Sort By, which is dimmed only when no Library window is in front. The owner is
+asked to confirm this in the implementation log (ruling 6).
+
+**Not yet verified.** Everything on the Mac (agents send no input to the owner's
+Mac, so the toolbar placement, View → Sort By, two windows, and the menus'
+dimming are unchecked), what VoiceOver says, a failed save seen in the running
+app (a test forces it and checks the Notice), the iPhone in landscape, iPad
+split screen, and any real device. The owner's check list is in the
+implementation log.
