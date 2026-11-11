@@ -833,6 +833,13 @@ found. Nothing in it adds a feature.
   macOS ran 134 tests in 14 suites (one more than before: the new model test).
   FolioCore: 107 tests in 9 suites passed, with warnings as errors.
   `./scripts/format.sh --check`: clean.
+- `./scripts/verify.sh`, run after that commit (c406800), exit code 0. Its final
+  line:
+
+  > green — all enabled platforms format, build, test, and launch
+
+  The script launched both apps and took a screenshot; nothing was typed or
+  clicked on the Mac.
 - The new test failed before the fix (the screen's Library Order was Recent,
   Descending, not the saved Title, Ascending) and passed after it.
 
@@ -1014,4 +1021,5 @@ saved file contents and commits that no branch points to any more.
 | 16bed1e | feat(library): a Sort menu chooses the Library Order on iPhone, iPad and Mac |
 | dead949 | docs(library): record the Library Order decisions and the owner's check list |
 | 2d44247 | docs(library): correct the check list to what was seen and record the git clean-up incident |
-| (this) | fix(library): the Sort ticks follow the saved Library Order after a failed launch, plus wording and comments the final review found |
+| c406800 | fix(library): the Sort ticks follow the saved Library Order after a failed launch, plus wording and comments the final review found |
+| (this) | docs(library): record the final verify.sh line for the final review's fixes |
