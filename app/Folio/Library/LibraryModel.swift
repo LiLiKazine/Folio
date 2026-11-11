@@ -113,9 +113,17 @@ import Observation
         queue(.filePickerFailed())
     }
 
-    func importSource(_ url: URL) async {
-        await perform(.import) { () async throws(LibraryError) in
-            _ = try await self.library.createImport(from: url)
+    /// Creates one Import per Source, in the order given, each awaited before the
+    /// next, so the Imports queue and run in that order. Each Source's security scope
+    /// is held while its Import is created. A Source that fails queues its Notice and
+    /// the rest are still handed to the Library.
+    func importSources(_ urls: [URL]) async {
+        for url in urls {
+            let isAccessing = url.startAccessingSecurityScopedResource()
+            await perform(.import) { () async throws(LibraryError) in
+                _ = try await self.library.createImport(from: url)
+            }
+            if isAccessing { url.stopAccessingSecurityScopedResource() }
         }
     }
 

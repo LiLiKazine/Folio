@@ -49,7 +49,7 @@ struct LibraryWindow: View {
                     Task { await model.chooseLibraryOrder(order) }
                 }
             )
-            .libraryDropTarget(onImport: importSource)
+            .libraryDropTarget { importSources([$0]) }
         #endif
         .background { dialogHost }
         .onChange(of: model.presentedNotice?.id, initial: true) { requestPresentedNotice() }
@@ -90,7 +90,7 @@ struct LibraryWindow: View {
             .fileImporter(
                 isPresented: isPresenting { $0 == .importPicker },
                 allowedContentTypes: [.folder, .zip],
-                allowsMultipleSelection: false,
+                allowsMultipleSelection: true,
                 onCompletion: importPicked
             )
             .alert(
@@ -150,8 +150,8 @@ struct LibraryWindow: View {
     private func importPicked(_ result: Result<[URL], any Error>) {
         switch result {
         case .success(let urls):
-            guard let url = urls.first else { return }
-            importSource(url)
+            guard !urls.isEmpty else { return }
+            importSources(urls)
         case .failure(let error):
             AppLog.library.error(
                 "File picker failed: \(String(describing: error), privacy: .public)")
@@ -159,13 +159,10 @@ struct LibraryWindow: View {
         }
     }
 
-    /// Imports a Source picked in the file picker or dropped on the window.
-    private func importSource(_ url: URL) {
-        Task {
-            let isAccessing = url.startAccessingSecurityScopedResource()
-            await model.importSource(url)
-            if isAccessing { url.stopAccessingSecurityScopedResource() }
-        }
+    /// Imports the Sources picked in the file picker or dropped on the window, in one
+    /// task so the Imports are created in the order given.
+    private func importSources(_ urls: [URL]) {
+        Task { await model.importSources(urls) }
     }
 
     /// The one way to ask for a dialog: it shows now if none is on screen,
