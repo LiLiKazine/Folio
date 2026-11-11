@@ -33,3 +33,13 @@ public actor InMemoryImportRepository: ImportRepository {
 
     public func remove(id: ImportID) async throws { records[id] = nil }
 }
+
+public actor InMemoryLibraryOrderRepository: LibraryOrderRepository {
+    private var order: LibraryOrder?
+
+    public init() {}
+
+    public func libraryOrder() async throws -> LibraryOrder? { order }
+
+    public func save(_ order: LibraryOrder) async throws { self.order = order }
+}

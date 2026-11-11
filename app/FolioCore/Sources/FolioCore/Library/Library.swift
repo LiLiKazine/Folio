@@ -83,7 +83,7 @@ public actor Library {
             for status in [ImportStatus.inProgress, .queued, .failed] {
                 items += try await imports.imports(status: status).map(LibraryItem.importRecord)
             }
-            return items.inLibraryOrder()
+            return items.inLibraryOrder(LibraryOrder.initial)
         }
     }
 

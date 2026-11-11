@@ -15,3 +15,9 @@ public protocol ImportRepository: Sendable {
     func update(_ record: Import) async throws
     func remove(id: ImportID) async throws
 }
+
+public protocol LibraryOrderRepository: Sendable {
+    /// The saved Library Order; nil when none was ever saved.
+    func libraryOrder() async throws -> LibraryOrder?
+    func save(_ order: LibraryOrder) async throws
+}
