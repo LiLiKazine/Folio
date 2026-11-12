@@ -23,6 +23,15 @@
             #expect(LibraryDropTarget.sources(in: [zip]) == [zip])
         }
 
+        @Test("a .cbz is a Source, whatever the extension's case")
+        func cbzAccepted() {
+            let lower = URL(
+                filePath: "/Users/reader/Downloads/Vol1.cbz", directoryHint: .notDirectory)
+            let upper = URL(
+                filePath: "/Users/reader/Downloads/Vol2.CBZ", directoryHint: .notDirectory)
+            #expect(LibraryDropTarget.sources(in: [lower, upper]) == [lower, upper])
+        }
+
         @Test("a URL that is neither a folder nor a zip is rejected")
         func otherFileRejected() {
             #expect(LibraryDropTarget.sources(in: [notASource]) == nil)

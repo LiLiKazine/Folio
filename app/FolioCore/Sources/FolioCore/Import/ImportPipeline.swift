@@ -172,7 +172,7 @@ public struct ImportPipeline: Sendable {
     private func stagePages(
         from source: URL, into staging: URL, progress: @Sendable (Int, Int) async -> Void
     ) async throws -> [Page] {
-        let isZip = source.pathExtension.lowercased() == "zip"
+        let isZip = SourceScanner.isZip(source)
         let pageFiles: [URL]
         if isZip {
             let archive = try openZip(source)
