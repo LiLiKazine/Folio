@@ -89,7 +89,7 @@ struct LibraryWindow: View {
         Color.clear
             .fileImporter(
                 isPresented: isPresenting { $0 == .importPicker },
-                allowedContentTypes: [.folder, .zip],
+                allowedContentTypes: [.folder, .zip, .cbz],
                 allowsMultipleSelection: true,
                 onCompletion: importPicked
             )

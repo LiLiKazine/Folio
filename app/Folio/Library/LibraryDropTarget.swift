@@ -1,4 +1,5 @@
 #if os(macOS)
+    import FolioCore
     import SwiftUI
 
     /// Lets the user drop several folders and zips onto the Library to Import each.
@@ -39,7 +40,7 @@
         nonisolated static func sources(in urls: [URL]) -> [URL]? {
             guard !urls.isEmpty else { return nil }
             let isEverySource = urls.allSatisfy {
-                isFolder($0) || $0.pathExtension.lowercased() == "zip"
+                isFolder($0) || SourceScanner.isZip($0)
             }
             return isEverySource ? urls : nil
         }

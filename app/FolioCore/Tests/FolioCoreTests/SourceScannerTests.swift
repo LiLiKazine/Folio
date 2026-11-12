@@ -67,6 +67,18 @@ struct SourceScannerTests {
         #expect(SourceScanner.title(forSource: URL(fileURLWithPath: "/x/Vol.3.zip")) == "Vol.3")
         #expect(SourceScanner.title(forSource: URL(fileURLWithPath: "/x/Vol.3")) == "Vol.3")
         #expect(SourceScanner.title(forSource: URL(fileURLWithPath: "/x/A.ZIP")) == "A")
+        #expect(SourceScanner.title(forSource: URL(fileURLWithPath: "/x/Vol.3.cbz")) == "Vol.3")
+        #expect(SourceScanner.title(forSource: URL(fileURLWithPath: "/x/B.CBZ")) == "B")
+    }
+
+    @Test("a .zip or .cbz is a zip Source, whatever the extension's case; nothing else is")
+    func isZip() {
+        for name in ["a.zip", "a.ZIP", "a.cbz", "a.CBZ", "Vol.3.cbz"] {
+            #expect(SourceScanner.isZip(URL(fileURLWithPath: "/x/\(name)")), "\(name)")
+        }
+        for name in ["a", "Vol.3", "a.cbr", "a.rar", "a.zip.png", "cbz"] {
+            #expect(!SourceScanner.isZip(URL(fileURLWithPath: "/x/\(name)")), "\(name)")
+        }
     }
 
     @Test("a directory or symbolic link with a Page extension is not a Page")

@@ -37,10 +37,16 @@ public enum SourceScanner {
             .map(\.url)
     }
 
-    /// Title for a picked item: last path component, minus a trailing `.zip`.
+    /// Whether the picked item is a zip: its extension is `zip` or `cbz`, in any case.
+    /// A `.cbz` is a zip under another name; Folio reads both the same way.
+    public static func isZip(_ url: URL) -> Bool {
+        ["zip", "cbz"].contains(url.pathExtension.lowercased())
+    }
+
+    /// Title for a picked item: last path component, minus a trailing `.zip` or `.cbz`.
     /// A folder name is returned unchanged, so `Vol.3` stays `Vol.3`.
     public static func title(forSource url: URL) -> String {
-        guard url.pathExtension.lowercased() == "zip" else { return url.lastPathComponent }
+        guard isZip(url) else { return url.lastPathComponent }
         return url.deletingPathExtension().lastPathComponent
     }
 }

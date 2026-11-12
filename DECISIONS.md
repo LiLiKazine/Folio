@@ -945,3 +945,48 @@ zip among several and picking exactly one zip on an iPad, the picker's own Cance
 button and confirming with nothing ticked, and the Library unable to save seen in the
 running app (a test forces it and checks the one Notice). The owner's
 check list is in the implementation log.
+
+## 2026-11-12: Comic book archives (.cbz) are Sources
+
+A `.cbz` is a zip under another name, so Folio now treats a file ending in `.cbz`
+(or `.CBZ`) exactly as it treats a `.zip`: the file picker lets the reader tick it,
+a `.cbz` dropped on the Mac's Library window is accepted, the Import reads it as a
+zip, and the Book's Title is the file's name without `.cbz`. Everything in
+`2026-11-11: Importing several Sources at once` applies to it: tick several, mix
+them with zips, each becomes its own Import and Book. The glossary is unchanged: a
+`.cbz` is a zip, so it is a Source. The words on screen are unchanged too ("folder
+or zip"); a `.cbz` is not named anywhere.
+
+**One rule for "is this a zip".** The picker, the Mac drop and the Import each used
+to test for `.zip` on their own. They now ask one place, `SourceScanner.isZip`, so
+the next extension is one change.
+
+**The file picker needed a type declared for `.cbz`.** Terms used here: the file
+picker greys out anything it was not told to accept, and the system keeps a list of
+file kinds ("types") with the file name endings each one covers. The system's own
+list has no entry for `.cbz` (checked on this Mac), so with only folders and zips
+allowed, a `.cbz` was greyed out and could not be ticked (seen on the iPhone 17 Pro
+simulator, iOS 26.5, before the change). Apple's page "Defining file and data types
+for your app" says to declare an *imported type* in the app's Info.plist "if it's a
+proprietary file format the system doesn't declare". Folio declares
+`io.lilikaine.github.folio.cbz-archive`, covering the ending `cbz` and counted as a
+kind of zip, in `app/Config/Folio-Types.plist`, which `Shared.xcconfig` merges into
+the generated Info.plist (`INFOPLIST_KEY_*` settings cannot hold a list). What the
+reader experiences: on the same simulator, `.cbz` and `.CBZ` files can be ticked,
+and two ticked together became two Books titled "Delta" and "Echo".
+
+**Rejected: asking the picker for a type made on the fly from the ending.**
+`UTType(filenameExtension: "cbz", conformingTo: .zip)` gives a type the system marks
+as made on the fly, while a `.cbz` file in Files has a different made-on-the-fly
+type with no link to zip (checked on this Mac), so the picker would still grey it
+out. Apple's page for that call says only that the system "may provide a dynamic
+type".
+
+**Not yet verified:**
+- Anything on the Mac: the picker, File → Import…, and dropping a `.cbz`.
+- A real device. If another installed app declares its own type for `.cbz`, the
+  picker may judge a `.cbz` by that app's declaration instead of Folio's; the
+  simulator has no such app.
+- The iPad.
+- A `.cbz` that is not a zip inside (a renamed `.rar`, for example): it takes the
+  existing "This zip can't be read" path; not seen in the running app.

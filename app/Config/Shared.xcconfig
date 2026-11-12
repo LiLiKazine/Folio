@@ -22,6 +22,9 @@ TARGETED_DEVICE_FAMILY = 1,2
 PRODUCT_NAME = $(TARGET_NAME)
 PRODUCT_BUNDLE_IDENTIFIER = io.lilikaine.github.folio
 GENERATE_INFOPLIST_FILE = YES
+// Keys with array or dictionary values (the .cbz type declaration) cannot be set
+// with INFOPLIST_KEY_*; Xcode merges this file into the generated Info.plist.
+INFOPLIST_FILE = Config/Folio-Types.plist
 INFOPLIST_KEY_UILaunchScreen_Generation = YES
 // App Store Connect refuses an iPad build that does not support every
 // orientation unless it declares UIRequiresFullScreen (validation error

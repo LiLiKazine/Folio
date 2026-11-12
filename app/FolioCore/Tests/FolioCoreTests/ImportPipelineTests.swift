@@ -167,6 +167,20 @@ struct ImportPipelineTests {
         try fixture.expectImported(book, bookID: bookID)
     }
 
+    @Test(".cbz and .CBZ are zips under another name and are imported like a zip")
+    func cbz() async throws {
+        for fileName in ["Source.cbz", "Source.CBZ"] {
+            let fixture = try Fixture()
+            defer { fixture.directory.remove() }
+            let source = try fixture.zipSource(["b.jpg", "a.png"], fileName: fileName)
+            let bookID = BookID()
+
+            let book = try await fixture.run(source, bookID: bookID)
+
+            try fixture.expectImported(book, bookID: bookID)
+        }
+    }
+
     @Test("no images fails with noImagesFound and leaves nothing")
     func noImages() async throws {
         let fixture = try Fixture()
